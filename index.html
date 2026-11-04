@@ -9,6 +9,7 @@
 <title>Lichtfenster</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
 /* Layout: one narrow column like a field notebook; spot cards carry a 3-day x 4-window light grid */
 :root{
@@ -92,6 +93,22 @@ legend{font:600 13px var(--body);color:var(--muted);padding:0 4px}
 .now b{display:block;font:600 20px var(--display)}
 .now span{font-size:12px;color:var(--muted)}
 .foot{color:var(--muted);font-size:12px;margin-top:18px}
+/* planner */
+#plan-map{height:56vh;min-height:320px;border-radius:12px;border:1px solid var(--line);z-index:0}
+.mk{width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.35)}
+.mk.t{background:var(--gold)}.mk.c{background:var(--blue)}.mk.m{background:#c9d2ee;border-color:#3b4466;width:16px;height:16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0}
+.seg button[aria-pressed=true]{background:var(--blue);color:#fff}
+.plan-ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+.plan-ctl label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+.plan-ctl input{width:100%}
+input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:18px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin-top:10px}
+.facts dt{color:var(--muted)}.facts dd{margin:0;font:13px var(--mono);text-align:right}
+.leaflet-tooltip{font:12px var(--body)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -104,6 +121,7 @@ legend{font:600 13px var(--body);color:var(--muted);padding:0 4px}
   <nav class="tabs" role="tablist">
     <button role="tab" id="tab-spots" aria-selected="true">Meine Spots</button>
     <button role="tab" id="tab-here" aria-selected="false">Hier &amp; jetzt</button>
+    <button role="tab" id="tab-plan" aria-selected="false">Planer</button>
   </nav>
 
   <section id="view-spots">
@@ -131,6 +149,46 @@ legend{font:600 13px var(--body);color:var(--muted);padding:0 4px}
     <div class="card" id="here-sug" hidden></div>
   </section>
 
+  <section id="view-plan" hidden>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="seg" role="group" aria-label="Was setzt ein Tipp auf die Karte?">
+          <button type="button" id="pm-target" aria-pressed="true">Motiv setzen</button>
+          <button type="button" id="pm-cam" aria-pressed="false">Kamera setzen</button>
+        </div>
+        <button type="button" id="plan-gps">Mein Standort</button>
+      </div>
+      <p class="hint" id="plan-help">Tippe auf die Karte, um das Motiv zu setzen. Punkte lassen sich verschieben.</p>
+      <div id="plan-map"></div>
+      <div class="legend">
+        <span><i style="border-color:var(--blue)"></i>Blickrichtung &amp; Bildausschnitt</span>
+        <span><i style="border-color:var(--gold)"></i>Hier stehen: Sonne hinter dem Motiv</span>
+        <span><i style="border-color:var(--gold);border-top-style:dotted"></i>Sonnenseite (Licht von vorn)</span>
+        <span><i style="border-color:#8e9ac4"></i>Hier stehen: Mond hinter dem Motiv</span>
+        <span><i style="border-color:var(--muted);border-top-style:dashed"></i>Motiv füllt ⅔ der Bildhöhe</span>
+      </div>
+      <div class="plan-ctl">
+        <div><label for="plan-time">Datum &amp; Uhrzeit</label><input type="datetime-local" id="plan-time"></div>
+        <div><label for="plan-h">Höhe des Motivs (m)</label><input type="number" id="plan-h" value="50" min="0"></div>
+        <div><label for="plan-f">Brennweite (mm, Kleinbild)</label><input type="number" id="plan-f" value="200" min="8"></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button type="button" data-pt="now">Jetzt</button>
+        <button type="button" data-pt="-30">−30 min</button>
+        <button type="button" data-pt="30">+30 min</button>
+        <button type="button" data-pt="bm">Blaue St. früh</button>
+        <button type="button" data-pt="ge">Goldene St. abends</button>
+        <button type="button" data-pt="be">Blaue St. abends</button>
+      </div>
+      <dl class="facts" id="plan-facts"></dl>
+      <div class="row" style="justify-content:flex-end;margin-top:10px">
+        <button type="button" id="plan-clear">Neu beginnen</button>
+        <button type="button" class="primary" id="plan-save">Als Spot speichern</button>
+      </div>
+      <p class="err" id="plan-err"></p>
+    </div>
+  </section>
+
   <p class="foot">Wetter: Open-Meteo · Motive: OpenStreetMap &amp; Wikipedia · Sonne/Mond werden im Gerät berechnet. Spots liegen nur auf diesem Gerät, darum ab und zu „Sichern“.</p>
 </div>
 
@@ -143,7 +201,7 @@ legend{font:600 13px var(--body);color:var(--muted);padding:0 4px}
   <label class="f" for="f-target">Motiv / Ziel (optional, für Richtung und Mond)</label>
   <input type="text" id="f-target" placeholder="48.13862, 11.57347">
   <div class="chk"><label for="f-th">Höhe des Motivs über der Kamera</label><input type="number" id="f-th" value="50"><span class="unit">m</span></div>
-  <div class="hint" id="f-geo"></div>
+  <div class="row" style="justify-content:space-between"><div class="hint" id="f-geo"></div><button type="button" id="f-plan">Auf Karte planen</button></div>
 
   <fieldset><legend>Wann?</legend>
     <div class="chk"><input type="checkbox" id="w-bm"><label for="w-bm">Blaue Stunde morgens</label></div>
@@ -185,6 +243,7 @@ legend{font:600 13px var(--body);color:var(--muted);padding:0 4px}
   </div>
 </div></dialog>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script>
 "use strict";
 /* ================= ASTRO (sun + moon, Meeus) ================= */
@@ -288,6 +347,10 @@ const Geo = {
       || s.match(/(-?\d{1,2}[.,]\d+)\s*[,;\s]\s*(-?\d{1,3}[.,]\d+)/);
     if(!m) return null; const lat=parseFloat(m[1].replace(",",".")), lon=parseFloat(m[2].replace(",","."));
     if(!(Math.abs(lat)<=90 && Math.abs(lon)<=180)) return null; return {lat, lon};},
+  dest(p,brg,m){const R=6371000,r=Math.PI/180,d=m/R,b=brg*r,la=p.lat*r,lo=p.lon*r;
+    const la2=Math.asin(Math.sin(la)*Math.cos(d)+Math.cos(la)*Math.sin(d)*Math.cos(b));
+    const lo2=lo+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la),Math.cos(d)-Math.sin(la)*Math.sin(la2));
+    return {lat:la2/r, lon:((lo2/r+540)%360)-180};},
   dir(b){return ["N","NO","O","SO","S","SW","W","NW"][Math.round(b/45)%8];},
   maps(p){return `https://www.google.com/maps?q=${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;},
   km(m){return m<1000? `${Math.round(m)} m` : `${(m/1000).toFixed(m<10000?1:0).replace(".",",")} km`;}
@@ -418,7 +481,7 @@ function renderSpots(){
     }
     return `<article class="card">
       <div class="spot-head"><div><h2>${esc(s.name)}</h2><div class="meta">${tInfo}</div>${s.note?`<div class="small muted">${esc(s.note)}</div>`:""}</div>
-      <div class="row" style="flex-wrap:nowrap"><a class="btn" href="${Geo.maps(s.cam)}" target="_blank" rel="noopener">Karte</a><button data-edit="${esc(s.id)}">Bearbeiten</button></div></div>
+      <div class="row" style="flex-wrap:nowrap"><a class="btn" href="${Geo.maps(s.cam)}" target="_blank" rel="noopener">Karte</a><button data-plan="${esc(s.id)}">Planer</button><button data-edit="${esc(s.id)}">Bearbeiten</button></div></div>
       ${state.errors[s.id]?`<p class="err">${esc(state.errors[s.id])}. Prüfe die Internetverbindung und tippe auf „Aktualisieren“.</p>`:""}
       ${!w && !state.errors[s.id]?`<p class="small muted">Lade Wetter …</p>`:""}
       ${grid}${detail}${moonHtml}</article>`;
@@ -426,6 +489,7 @@ function renderSpots(){
 }
 $("spots").addEventListener("click",e=>{
   const ed=e.target.closest("[data-edit]"); if(ed){ openEditor(spots.find(s=>s.id===ed.dataset.edit)); return; }
+  const pl=e.target.closest("[data-plan]"); if(pl){ const sp=spots.find(s=>s.id===pl.dataset.plan); Plan.open({cam:sp.cam,target:sp.target,h:sp.target?.h,name:sp.name,id:sp.id}); return; }
   const c=e.target.closest(".cell[data-spot]"); if(!c) return;
   const o={id:c.dataset.spot, di:+c.dataset.di, k:c.dataset.k};
   state.open = (state.open && state.open.id===o.id && state.open.di===o.di && state.open.k===o.k)? null : o;
@@ -574,10 +638,130 @@ $("here-sug").addEventListener("click",e=>{
   updateGeoHint();
 });
 
+/* ================= PLANNER (map) ================= */
+const Optics={
+  vfov:f=>2*Math.atan(12/f)*180/Math.PI,   // full frame, landscape: 24 mm high
+  hfov:f=>2*Math.atan(18/f)*180/Math.PI,   // 36 mm wide
+  angle:(h,d)=>Math.atan2(h,d)*180/Math.PI,
+  distForFill:(h,f,fill)=>h/Math.tan(fill*Optics.vfov(f)*Math.PI/180)
+};
+const Plan=(()=>{
+  const st={target:null,cam:null,mode:"target",t:Date.now(),editingId:null,name:""};
+  let map=null, over=null, mk={}, fitted=false;
+  const LL=p=>[p.lat,p.lon];
+  const icon=c=>window.L.divIcon({className:"",html:`<div class="mk ${c}"></div>`,iconSize:[20,20],iconAnchor:[10,10]});
+  function toLocalInput(ms){const d=new Date(ms); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16);}
+  function fromLocalInput(v){const t=new Date(v).getTime(); return isNaN(t)?Date.now():t;}
+  function setMode(m){st.mode=m; $("pm-target").setAttribute("aria-pressed",m==="target"); $("pm-cam").setAttribute("aria-pressed",m==="cam");
+    $("plan-help").textContent = m==="target"? "Tippe auf die Karte, um das Motiv zu setzen. Punkte lassen sich verschieben." : "Tippe auf die Karte, um deinen Kamera-Standort zu setzen. Oder folge einer der farbigen Linien.";}
+  function init(){
+    if(map) return true;
+    if(!window.L){ $("plan-err").textContent="Karte konnte nicht geladen werden. Prüfe die Internetverbindung und lade die Seite neu."; return false; }
+    map=window.L.map("plan-map").setView([48.1374,11.5755],13);
+    window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+    over=window.L.layerGroup().addTo(map);
+    map.on("click",e=>{ const p={lat:e.latlng.lat,lon:e.latlng.lng};
+      if(st.mode==="target"){ st.target=p; if(!st.cam) setMode("cam"); } else st.cam=p; draw(); });
+    return true;
+  }
+  function marker(key, p, cls, label){
+    if(!p){ if(mk[key]){ map.removeLayer(mk[key]); delete mk[key]; } return; }
+    if(!mk[key]){ mk[key]=window.L.marker(LL(p),{icon:icon(cls),draggable:true,keyboard:true,title:label}).addTo(map);
+      mk[key].bindTooltip(label,{direction:"top",offset:[0,-10]});
+      mk[key].on("drag",ev=>{ const ll=ev.target.getLatLng(); st[key]={lat:ll.lat,lon:ll.lng}; draw(true); }); }
+    else mk[key].setLatLng(LL(p));
+  }
+  function line(a,b,opt,tip){ const l=window.L.polyline([LL(a),LL(b)],opt).addTo(over); if(tip) l.bindTooltip(tip,{sticky:true}); return l; }
+  function draw(dragging){
+    if(!map) return;
+    over.clearLayers();
+    marker("target",st.target,"t","Motiv"); marker("cam",st.cam,"c","Kamera");
+    const H=Math.max(0,Number($("plan-h").value)||0), f=Math.max(8,Number($("plan-f").value)||50), facts=[];
+    const css=getComputedStyle(document.documentElement), C={blue:css.getPropertyValue("--blue").trim(),gold:css.getPropertyValue("--gold").trim(),muted:css.getPropertyValue("--muted").trim()};
+    if(st.target){
+      const T=st.target, dist0 = st.cam? Geo.dist(st.cam,T) : 3000, R=Math.max(1500, dist0*1.4);
+      const su=Astro.sun(st.t,T.lat,T.lon), mo=Astro.moon(st.t,T.lat,T.lon);
+      facts.push(["Zeit", new Date(st.t).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})]);
+      if(su.alt>-6){
+        line(T, Geo.dest(T,(su.az+180)%360,R), {color:C.gold,weight:4}, `Sonne hinter dem Motiv (Sonne ${su.alt.toFixed(0)}° hoch)`);
+        line(T, Geo.dest(T,su.az,R*0.6), {color:C.gold,weight:3,dashArray:"2 8"}, "Sonnenseite: Motiv von vorn beleuchtet");
+        facts.push(["Sonne", `${Math.round(su.az)}° ${Geo.dir(su.az)}, ${su.alt.toFixed(1).replace(".",",")}° hoch`]);
+      } else facts.push(["Sonne", `unter dem Horizont (${su.alt.toFixed(0)}°)`]);
+      if(mo.alt>0){
+        line(T, Geo.dest(T,(mo.az+180)%360,R), {color:"#8e9ac4",weight:4}, `Mond hinter dem Motiv (${mo.alt.toFixed(1)}° hoch)`);
+        let mtxt=`${Math.round(mo.az)}° ${Geo.dir(mo.az)}, ${mo.alt.toFixed(1).replace(".",",")}° hoch, ${Math.round(mo.illum*100)} %`;
+        facts.push(["Mond", mtxt]);
+        if(H>0 && mo.alt>0.3 && mo.alt<30){
+          const dm=H/Math.tan(mo.alt*Math.PI/180), pm=Geo.dest(T,(mo.az+180)%360,dm);
+          window.L.marker(LL(pm),{icon:icon("m"),title:"Mond hinter der Spitze"}).addTo(over)
+            .bindTooltip(`Hier steht der Mond hinter der Spitze · ${Geo.km(dm)}`,{direction:"top",offset:[0,-8]})
+            .on("click",()=>{ st.cam=pm; draw(); });
+          facts.push(["Mond-Standort", `${Geo.km(dm)} vom Motiv (antippen = Kamera dorthin)`]);
+          if(dm>R) map.fitBounds(window.L.latLngBounds([LL(T),LL(pm)]).pad(0.15));
+        }
+      } else facts.push(["Mond", "unter dem Horizont"]);
+      if(H>0){
+        const d66=Optics.distForFill(H,f,0.66);
+        window.L.circle(LL(T),{radius:d66,color:C.muted,weight:2,dashArray:"6 6",fill:false,interactive:false}).addTo(over);
+        facts.push(["⅔ Bildhöhe bei "+f+" mm", `aus ${Geo.km(d66)} Entfernung`]);
+      }
+    }
+    if(st.cam && st.target){
+      const C0=st.cam,T=st.target,d=Geo.dist(C0,T),b=Geo.bearing(C0,T),hf=Optics.hfov(f),r=d*1.25;
+      const pts=[LL(C0)]; for(let a=-hf/2;a<=hf/2+0.001;a+=hf/12) pts.push(LL(Geo.dest(C0,(b+a+360)%360,r))); pts.push(LL(C0));
+      window.L.polygon(pts,{color:C.blue,weight:1,fillColor:C.blue,fillOpacity:0.12,interactive:false}).addTo(over);
+      line(C0,T,{color:C.blue,weight:3},`${Geo.km(d)} · ${Math.round(b)}°`);
+      const ang=Optics.angle(H,d), fill=ang/Optics.vfov(f)*100;
+      facts.unshift(["Entfernung / Richtung", `${Geo.km(d)} · ${Math.round(b)}° ${Geo.dir(b)}`],
+        ["Motiv im Bild", H>0? `${fill.toFixed(0)} % der Bildhöhe (quer) bei ${f} mm` : "Höhe des Motivs eintragen"],
+        ["Bildwinkel", `${hf.toFixed(1).replace(".",",")}° breit · ${Optics.vfov(f).toFixed(1).replace(".",",")}° hoch`]);
+      if(!dragging && !fitted){ map.fitBounds(window.L.latLngBounds([LL(C0),LL(T)]).pad(0.3)); fitted=true; }
+    }
+    $("plan-facts").innerHTML = facts.length? facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("") : `<dt>Start</dt><dd>Motiv auf der Karte antippen</dd>`;
+  }
+  function setTime(ms){ st.t=ms; $("plan-time").value=toLocalInput(ms); draw(); }
+  function nextWindow(key){
+    const p=st.target||st.cam||herePos||{lat:48.1374,lon:11.5755};
+    for(let i=0;i<4;i++){ const w=Astro.windows(midnight(i),p.lat,p.lon)[key]; if(w && w.end>Date.now()) return (w.start+w.end)/2; }
+    return Date.now();
+  }
+  function show(){ if(!init()) return; setTimeout(()=>{ map.invalidateSize(); draw(); },50); }
+  function open(o){
+    st.target=o.target?{lat:o.target.lat,lon:o.target.lon}:null; st.cam=o.cam?{...o.cam}:null; st.editingId=o.id||null; st.name=o.name||""; fitted=false;
+    if(o.h!=null) $("plan-h").value=o.h;
+    setMode(st.target? "cam":"target"); showTab("plan");
+    setTimeout(()=>{ if(!map) return; const pts=[st.target,st.cam].filter(Boolean).map(LL); if(pts.length===1) map.setView(pts[0],15); },80);
+  }
+  function wire(){
+    $("plan-time").value=toLocalInput(st.t);
+    $("pm-target").addEventListener("click",()=>setMode("target")); $("pm-cam").addEventListener("click",()=>setMode("cam"));
+    $("plan-time").addEventListener("change",e=>{ st.t=fromLocalInput(e.target.value); draw(); });
+    ["plan-h","plan-f"].forEach(id=>$(id).addEventListener("input",()=>draw()));
+    document.querySelectorAll("[data-pt]").forEach(b=>b.addEventListener("click",()=>{ const v=b.dataset.pt;
+      if(v==="now") setTime(Date.now()); else if(v==="30"||v==="-30") setTime(st.t+Number(v)*60000); else setTime(nextWindow(v)); }));
+    $("plan-gps").addEventListener("click",()=>{ $("plan-err").textContent=""; locate(p=>{ herePos=p; st.cam={lat:p.lat,lon:p.lon}; if(map) map.setView(LL(p),15); draw(); }, msg=>$("plan-err").textContent=msg); });
+    $("plan-clear").addEventListener("click",()=>{ st.target=null; st.cam=null; st.editingId=null; st.name=""; fitted=false; setMode("target"); draw(); });
+    $("plan-save").addEventListener("click",()=>{
+      $("plan-err").textContent="";
+      if(!st.cam){ $("plan-err").textContent="Setze zuerst einen Kamera-Standort."; return; }
+      const existing=st.editingId? spots.find(s=>s.id===st.editingId):null;
+      openEditor(existing||null);
+      if(!existing) $("f-name").value=st.name||"";
+      $("f-cam").value=`${st.cam.lat.toFixed(5)}, ${st.cam.lon.toFixed(5)}`;
+      $("f-target").value=st.target? `${st.target.lat.toFixed(5)}, ${st.target.lon.toFixed(5)}`:"";
+      $("f-th").value=$("plan-h").value; updateGeoHint();
+    });
+  }
+  return {show, open, wire, draw};
+})();
+
 /* ================= TABS & BOOT ================= */
-function show(tab){ const here=tab==="here"; $("view-here").hidden=!here; $("view-spots").hidden=here;
-  $("tab-here").setAttribute("aria-selected",here); $("tab-spots").setAttribute("aria-selected",!here); }
-$("tab-spots").addEventListener("click",()=>show("spots")); $("tab-here").addEventListener("click",()=>show("here"));
+function showTab(tab){ for(const t of ["spots","here","plan"]){ $("view-"+t).hidden = t!==tab; $("tab-"+t).setAttribute("aria-selected", t===tab); }
+  if(tab==="plan") Plan.show(); }
+$("tab-spots").addEventListener("click",()=>showTab("spots")); $("tab-here").addEventListener("click",()=>showTab("here")); $("tab-plan").addEventListener("click",()=>showTab("plan"));
+Plan.wire();
+$("f-plan").addEventListener("click",()=>{ const c=Geo.parse($("f-cam").value), t=Geo.parse($("f-target").value);
+  const o={cam:c,target:t,h:Number($("f-th").value)||0,name:$("f-name").value.trim(),id:editing?.id}; $("editor").close(); Plan.open(o); });
 $("today").textContent=new Date().toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"});
 load(); refreshAll(false);
 </script>
