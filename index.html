@@ -118,6 +118,19 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
 .best-list .when{font:600 15px var(--body)}
 .best-list .t{flex:1;min-width:0}
 .best-list .w{font:12px var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.cbar{display:flex;align-items:flex-end;gap:2px;height:28px;width:24px;padding:2px;background:var(--surface);border:1px solid var(--line);border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.cbar i{display:block;width:5px;border-radius:1px}
+.cbar .low{background:#6f7687}.cbar .mid{background:#8fa3dc}.cbar .high{background:#e0c27a}
+.meter{display:grid;grid-template-columns:minmax(120px,auto) 1fr auto;gap:8px;align-items:center;font-size:14px;padding:4px 0}
+.meter .bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden}
+.meter .bar span{display:block;height:100%;border-radius:4px}
+.meter .pct{font:12px var(--mono);color:var(--muted);min-width:78px;text-align:right}
+.ev{margin-top:8px}
+.ev h4{font:600 16px var(--body);margin:0 0 2px}
+.profile{width:100%;height:auto;margin-top:10px;background:var(--bg);border-radius:8px;display:block}
+.blk li{font-size:14px;padding:3px 0}
+.layers{font:11px var(--mono);color:var(--muted);display:flex;gap:10px;margin-top:4px}
+.layers i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -154,6 +167,7 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
       <div id="here-now"></div>
     </div>
     <div id="here-windows"></div>
+    <div class="card" id="here-sky" hidden></div>
     <div class="card" id="here-own" hidden></div>
     <div class="card" id="here-sug" hidden></div>
   </section>
@@ -195,6 +209,23 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
         <button type="button" class="primary" id="plan-save">Als Spot speichern</button>
       </div>
       <p class="err" id="plan-err"></p>
+
+      <div class="best" id="sight-box">
+        <h3>Sichtlinie: Gelände &amp; Gebäude</h3>
+        <div class="plan-ctl"><div><label for="s-eye">Kamera über Boden (m)</label><input type="number" id="s-eye" value="1.6" step="0.1" min="0"></div></div>
+        <div class="row" style="margin-top:6px"><button type="button" class="primary" id="s-run">Sicht prüfen</button><span class="small muted" id="s-status"></span></div>
+        <div id="s-res"></div>
+        <p class="hint">Gelände aus dem 90-m-Höhenmodell (Copernicus, über Open-Meteo). Gebäude aus OpenStreetMap. Fehlt dort die Höhe, wird sie aus den Stockwerken oder der Gebäudeart geschätzt. Bäume werden nicht berücksichtigt.</p>
+      </div>
+
+      <div class="best" id="sky-box">
+        <h3>Himmelsröte &amp; goldene Wolken</h3>
+        <div class="plan-ctl"><div><label for="sky-ev">Sonnenaufgang oder -untergang</label><select id="sky-ev"></select></div></div>
+        <div class="row" style="margin-top:6px"><button type="button" class="primary" id="sky-run">Prognose anzeigen</button><button type="button" id="sky-zoom">Zum Standort zoomen</button><span class="small muted" id="sky-status"></span></div>
+        <div id="sky-res"></div>
+        <div class="layers"><span><i style="background:#6f7687"></i>tief</span><span><i style="background:#8fa3dc"></i>mittel</span><span><i style="background:#e0c27a"></i>hoch</span></div>
+        <p class="hint">Berechnet für den Kamera-Standort, sonst für das Motiv. Die Karte zeigt die Wolken entlang der Sonnenrichtung bis 400 km. Mittelhohe und hohe Wolken in deiner Nähe (0–50 km) sind die Leinwand. Richtung Sonne (150–400 km) braucht es eine Lücke, durch die das Licht von unten auf die Wolken fällt. Tiefe Wolken bei dir verdecken die Sicht.</p>
+      </div>
 
       <div class="best">
         <h3>Beste Zeit finden</h3>
@@ -247,6 +278,7 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
     <div class="chk"><input type="checkbox" id="c-fog"><label for="c-fog">Nebel (Taupunktdifferenz ≤ 1,5 K und Wind schwach, oder Sicht &lt; 1 km)</label></div>
     <div class="chk"><input type="checkbox" id="c-wind"><label for="c-wind">Wenig Wind, höchstens</label><input type="number" id="c-wind-v" value="15"><span class="unit">km/h</span></div>
     <div class="chk"><input type="checkbox" id="c-rain"><label for="c-rain">Kein Regen, Wahrscheinlichkeit höchstens</label><input type="number" id="c-rain-v" value="30"><span class="unit">%</span></div>
+    <div class="chk"><input type="checkbox" id="c-glow"><label for="c-glow">Goldene Wolken (goldene Stunde) bzw. sichtbare Himmelsröte (blaue Stunde)</label></div>
     <div class="chk"><input type="checkbox" id="c-moon"><label for="c-moon">Mond hinter dem Motiv suchen (nächste 120 Tage)</label></div>
     <div class="hint">Wettermodelle melden Sichtweiten oft nur bis ca. 24 km. Für Alpenblick sind Föhn und trockene Luft die besseren Zeichen.</div>
   </fieldset>
@@ -459,10 +491,12 @@ const Weather = (() => {
 })();
 
 /* ================= RATING ================= */
-function evalCriteria(spot, h, fdiff){
+function evalCriteria(spot, h, fdiff, glow){
   const c=spot.crit, out=[];
   const add=(label, ok, v)=>out.push({label, ok, v});
   if(!h){ return [{label:"Keine Vorhersage für diese Zeit", ok:null, v:""}]; }
+  if(c.glow && c.glow.on && glow!==undefined){ if(glow===null) add("Himmelsröte", null, "keine Daten");
+    else add(glow.label, glow.v>=0.55?"ok":glow.v>=0.3?"warn":"bad", `${Math.round(glow.v*100)} %`); }
   if(c.clear.on) add("Bewölkung", h.cloud_cover<=c.clear.max?"ok":h.cloud_cover<=c.clear.max+20?"warn":"bad", `${h.cloud_cover} % (max ${c.clear.max})`);
   if(c.low.on) add("Tiefe Wolken", h.cloud_cover_low<=c.low.max?"ok":h.cloud_cover_low<=c.low.max+20?"warn":"bad", `${h.cloud_cover_low} % (max ${c.low.max})`);
   if(c.vis.on){const km=h.visibility/1000; add("Fernsicht", km>=c.vis.min?"ok":km>=c.vis.min*0.6?"warn":"bad", `${km.toFixed(0)} km (min ${c.vis.min})`);}
@@ -485,7 +519,7 @@ function foehnAt(f, ms){ if(!f) return null; let best=null,bd=Infinity; f.time.f
 
 /* ================= STORAGE ================= */
 const KEY="lichtfenster.spots.v1";
-const DEFAULT_CRIT=()=>({clear:{on:false,max:30},low:{on:false,max:15},vis:{on:false,min:20},dry:{on:false,max:60},foehn:{on:false},fog:{on:false},wind:{on:false,max:15},rain:{on:true,max:30}});
+const DEFAULT_CRIT=()=>({clear:{on:false,max:30},low:{on:false,max:15},vis:{on:false,min:20},dry:{on:false,max:60},foehn:{on:false},fog:{on:false},wind:{on:false,max:15},rain:{on:true,max:30},glow:{on:false}});
 const SEED=[{id:"olympiaberg-frauenkirche",name:"Olympiaberg → Frauenkirche",cam:{lat:48.16950,lon:11.55060},target:{lat:48.13862,lon:11.57347,h:50},
   windows:{bm:true,gm:true,ge:true,be:true},
   crit:{clear:{on:true,max:30},low:{on:true,max:15},vis:{on:true,min:20},dry:{on:true,max:60},foehn:{on:true},fog:{on:false},wind:{on:false,max:15},rain:{on:true,max:30}},
@@ -509,11 +543,23 @@ function daysFor(p){ const k=p.lat.toFixed(2)+","+p.lon.toFixed(2)+","+midnight(
 function mid(win){return win? (win.start+win.end)/2 : null;}
 
 /* ================= SPOTS VIEW ================= */
-const state={open:null, weather:{}, foehn:null, errors:{}};
+const state={open:null, weather:{}, foehn:null, errors:{}, glow:{}};
 async function loadWeather(force){
   const need=spots.some(s=>s.crit.foehn.on);
   if(need){ try{ state.foehn=await Weather.foehn(force);}catch(e){ state.foehn=null; } }
   await Promise.all(spots.map(async s=>{ try{ state.weather[s.id]=await Weather.get(s.cam,force); delete state.errors[s.id]; }catch(e){ state.errors[s.id]=e.message||"Wetter nicht abrufbar"; } }));
+  await Promise.all(spots.filter(s=>s.crit.glow?.on).map(async s=>{ try{
+    const d=daysFor(s.cam), rise=d.find(x=>x.w.rise)?.w.rise, set=d.find(x=>x.w.set)?.w.set; if(!rise||!set){ state.glow[s.id]=null; return; }
+    state.glow[s.id]=await Sky.load(s.cam,[Astro.sun(rise,s.cam.lat,s.cam.lon).az, Astro.sun(set,s.cam.lat,s.cam.lon).az]);
+  }catch(e){ state.glow[s.id]=null; } }));
+}
+function glowFor(s, d, k){
+  if(!s.crit.glow?.on) return undefined;
+  const data=state.glow[s.id]; if(!data) return null;
+  const morning = k==="bm"||k==="gm", t = morning? d.w.rise : d.w.set; if(!t) return null;
+  const ser=Sky.at(data[morning?0:1], t); if(!ser) return null;
+  const r=Sky.evaluate(ser), gold = k==="gm"||k==="ge";
+  return {v: gold? r.gold : r.visible, label: gold? "Goldene Wolken" : "Sichtbare Himmelsröte"};
 }
 function renderSpots(){
   const box=$("spots");
@@ -529,7 +575,7 @@ function renderSpots(){
         if(!s.windows[k] || !win){ grid+=`<div class="cell off" aria-hidden="true">–</div>`; continue; }
         const past = win.end < Date.now();
         let cls="none";
-        if(w && !past){ const h=Weather.at(w, mid(win)); cls=overall(evalCriteria(s,h,foehnAt(state.foehn,mid(win)))); }
+        if(w && !past){ const h=Weather.at(w, mid(win)); cls=overall(evalCriteria(s,h,foehnAt(state.foehn,mid(win)),glowFor(s,d,k))); }
         if(past) cls="off";
         const sel = state.open && state.open.id===s.id && state.open.di===di && state.open.k===k;
         grid+=`<button class="cell ${cls}${sel?" sel":""}" data-spot="${esc(s.id)}" data-di="${di}" data-k="${k}" ${past?"disabled":""} aria-label="${WN[k]} ${fmtD(d.start)}"><b>${fmtT(win.start)}</b></button>`;
@@ -539,7 +585,7 @@ function renderSpots(){
     let detail="";
     if(state.open && state.open.id===s.id){
       const d=days[state.open.di], win=d.w[state.open.k], m=mid(win);
-      const h=w? Weather.at(w,m):null, list=evalCriteria(s,h,foehnAt(state.foehn,m));
+      const h=w? Weather.at(w,m):null, list=evalCriteria(s,h,foehnAt(state.foehn,m),glowFor(s,d,state.open.k));
       const mo=Astro.moon(m,s.cam.lat,s.cam.lon), su=Astro.sun(m,s.cam.lat,s.cam.lon);
       detail=`<div class="detail"><div class="row" style="justify-content:space-between"><b>${WN[state.open.k]} · ${fmtD(d.start)} · ${fmtT(win.start)}–${fmtT(win.end)}</b><span class="dot ${overall(list)}"></span></div>
         <ul class="plain">${list.map(x=>`<li class="crit"><span class="dot ${x.ok||"none"}"></span>${esc(x.label)}<span class="v">${esc(x.v)}</span></li>`).join("")}</ul>
@@ -581,7 +627,7 @@ async function refreshAll(force){ renderSpots(); await loadWeather(force); rende
 
 /* ================= EDITOR ================= */
 let editing=null;
-const CK=["clear","low","vis","dry","foehn","fog","wind","rain"];
+const CK=["clear","low","vis","dry","foehn","fog","wind","rain","glow"];
 function openEditor(spot){
   editing = spot || null;
   const s = spot || {name:"",cam:null,target:null,windows:{bm:true,gm:true,ge:true,be:true},crit:DEFAULT_CRIT(),moon:false,note:""};
@@ -589,7 +635,7 @@ function openEditor(spot){
   $("f-name").value=s.name; $("f-cam").value=s.cam? `${s.cam.lat.toFixed(5)}, ${s.cam.lon.toFixed(5)}`:"";
   $("f-target").value=s.target? `${s.target.lat.toFixed(5)}, ${s.target.lon.toFixed(5)}`:""; $("f-th").value=s.target?.h ?? 50;
   for(const k of WORDER) $("w-"+(k==="ge"?"ge":k)).checked=!!s.windows[k];
-  for(const k of CK){ $("c-"+k).checked=!!s.crit[k].on; const v=$("c-"+k+"-v"); if(v) v.value = s.crit[k].max ?? s.crit[k].min; }
+  for(const k of CK){ $("c-"+k).checked=!!s.crit[k]?.on; const v=$("c-"+k+"-v"); if(v && s.crit[k]) v.value = s.crit[k].max ?? s.crit[k].min; }
   $("c-moon").checked=!!s.moon; $("f-note").value=s.note||""; $("edit-err").textContent="";
   $("edit-del").hidden=!spot; updateGeoHint();
   $("editor").showModal();
@@ -649,7 +695,7 @@ $("locate").addEventListener("click",()=>{
     herePos=p; $("here-pos").textContent=`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)} · ±${Math.round(p.acc)} m`;
     renderHereAstro(); renderOwnNearby();
     try{ const w=await Weather.get(p,true); renderHereWeather(w); }catch(e){ $("here-now").innerHTML=`<p class="err">${esc(e.message)}</p>`; }
-    loadSuggestions(p);
+    renderHereSky(p); loadSuggestions(p);
   }, msg=>{ $("here-pos").textContent=msg; });
 });
 function renderHereAstro(){
@@ -711,6 +757,169 @@ $("here-sug").addEventListener("click",e=>{
   updateGeoHint();
 });
 
+/* ================= SKY GLOW ================= */
+const Sky=(()=>{
+  const DISTS=[0,25,50,100,150,200,300,400];
+  const cache=new Map();
+  const clamp=v=>Math.max(0,Math.min(1,v));
+  const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  function events(p,n){
+    const out=[];
+    for(let i=0;i<4;i++){ const w=Astro.windows(midnight(i),p.lat,p.lon);
+      if(w.rise && w.rise>Date.now()-20*60000) out.push({type:"rise",t:w.rise,day:i});
+      if(w.set && w.set>Date.now()-20*60000) out.push({type:"set",t:w.set,day:i}); }
+    return out.sort((a,b)=>a.t-b.t).slice(0,n);
+  }
+  function label(e){ const d=midnight(0), day = e.t<d+86400000? "Heute" : e.t<d+2*86400000? "Morgen" : fmtD(e.t);
+    return `${day} ${e.type==="rise"?"früh":"Abend"} · ${fmtT(e.t)} Sonnen${e.type==="rise"?"aufgang":"untergang"}`; }
+  async function load(p, azs){
+    const pts=[]; azs.forEach((az,ai)=>DISTS.forEach(km=>{ const q=km? Geo.dest(p,az,km*1000) : {lat:p.lat,lon:p.lon}; pts.push({ai,km,lat:q.lat,lon:q.lon}); }));
+    const key=pts.map(x=>x.lat.toFixed(2)+","+x.lon.toFixed(2)).join(";"), c=cache.get(key);
+    if(c && Date.now()-c.at<30*60000) return c.data;
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${pts.map(x=>x.lat.toFixed(3)).join(",")}&longitude=${pts.map(x=>x.lon.toFixed(3)).join(",")}&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability&forecast_days=3&timeformat=unixtime&timezone=GMT`;
+    const r=await fetch(url); if(!r.ok) throw new Error("Wolkendaten nicht abrufbar ("+r.status+")");
+    let j=await r.json(); if(!Array.isArray(j)) j=[j];
+    const data=azs.map((az,ai)=>({az, pts:pts.map((x,i)=>({...x,h:j[i]?.hourly})).filter(x=>x.ai===ai)}));
+    cache.set(key,{at:Date.now(),data}); return data;
+  }
+  function at(ray, t){
+    const out=[];
+    for(const x of ray.pts){ if(!x.h) return null; const tt=x.h.time; let bi=-1,bd=Infinity;
+      for(let i=0;i<tt.length;i++){ const d=Math.abs(tt[i]*1000-t); if(d<bd){bd=d;bi=i;} }
+      if(bd>90*60000) return null;
+      const v=k=>x.h[k]?.[bi]; if(v("cloud_cover_low")==null) return null;
+      out.push({km:x.km,lat:x.lat,lon:x.lon,low:v("cloud_cover_low"),mid:v("cloud_cover_mid"),high:v("cloud_cover_high"),rain:v("precipitation_probability")??0}); }
+    return out;
+  }
+  function evaluate(ser){
+    const g=km=>ser.find(x=>x.km===km);
+    const canvas=avg([0,25,50].map(k=>Math.min(100,g(k).mid+0.8*g(k).high)));
+    const fC = canvas<10?0 : canvas<30?(canvas-10)/20 : canvas<=80?1 : 1-0.5*(canvas-80)/20;
+    const blockN=avg([25,50,100].map(k=>Math.max(g(k).low,0.7*g(k).mid)));
+    const fN=1-clamp((blockN-15)/55);
+    const blockF=avg([150,200,300,400].map(k=>Math.max(g(k).low,0.8*g(k).mid)));
+    const fF=1-clamp((blockF-20)/60);
+    const lowL=Math.max(g(0).low,g(25).low);
+    let fL=1-clamp((lowL-25)/55); if(g(0).rain>60) fL*=0.5;
+    const glow=fC*fF*Math.min(1,fN+0.3);
+    return {gold:fC*fN*fL, glow, visible:glow*fL, canvas, blockN, blockF, lowL, fC, fN, fF, fL};
+  }
+  const word=v=>v>=0.55?"gut":v>=0.3?"möglich":"gering";
+  const cls=v=>v>=0.55?"ok":v>=0.3?"warn":"bad";
+  function meters(r, type){
+    const row=(name,v)=>`<div class="meter"><span>${name}</span><div class="bar"><span style="width:${Math.round(v*100)}%;background:var(--${cls(v)})"></span></div><span class="pct">${Math.round(v*100)} % · ${word(v)}</span></div>`;
+    return row(type==="rise"?"Goldene Wolken (nach Aufgang)":"Goldene Wolken (vor Untergang)", r.gold)
+      + row(type==="rise"?"Morgenrot am Himmel":"Abendrot am Himmel", r.glow)
+      + row("Sichtbar bei dir", r.visible)
+      + `<div class="meta">Leinwand ${Math.round(r.canvas)} % · Richtung Sonne verdeckt: nah ${Math.round(r.blockN)} %, fern ${Math.round(r.blockF)} % · tiefe Wolken bei dir ${Math.round(r.lowL)} %</div>`;
+  }
+  return {events, label, load, at, evaluate, meters, cls, DISTS};
+})();
+
+async function renderHereSky(p){
+  const box=$("here-sky"); box.hidden=false;
+  box.innerHTML=`<b>Himmelsröte &amp; goldene Wolken</b><p class="small muted">Lade Wolken entlang der Sonnenrichtung …</p>`;
+  const evs=Sky.events(p,2);
+  if(!evs.length){ box.innerHTML=`<b>Himmelsröte &amp; goldene Wolken</b><p class="small muted">Kein Sonnenauf- oder -untergang in den nächsten Tagen.</p>`; return; }
+  try{
+    const rays=await Sky.load(p, evs.map(e=>Astro.sun(e.t,p.lat,p.lon).az));
+    box.innerHTML=`<b>Himmelsröte &amp; goldene Wolken</b>`+evs.map((e,i)=>{ const ser=Sky.at(rays[i],e.t);
+      return `<div class="ev"><h4>${esc(Sky.label(e))}</h4>${ser? Sky.meters(Sky.evaluate(ser),e.type) : `<p class="small muted">Noch keine Vorhersage.</p>`}</div>`; }).join("")
+      +`<div class="row" style="margin-top:8px"><button type="button" id="here-sky-map">Auf der Karte ansehen</button></div>`;
+    $("here-sky-map").addEventListener("click",()=>Plan.openSky(p));
+  }catch(e){ box.innerHTML=`<b>Himmelsröte &amp; goldene Wolken</b><p class="err">${esc(e.message)}</p>`; }
+}
+
+/* ================= SIGHT LINE (terrain + buildings) ================= */
+const Sight=(()=>{
+  const REFF=6371000/(1-0.13);
+  const curv=x=>x*x/(2*REFF);
+  async function elev(points){
+    const r=await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${points.map(p=>p.lat.toFixed(5)).join(",")}&longitude=${points.map(p=>p.lon.toFixed(5)).join(",")}`);
+    if(!r.ok) throw new Error("Höhendaten nicht abrufbar ("+r.status+")");
+    const j=await r.json(); if(!Array.isArray(j.elevation)) throw new Error("Höhendaten unvollständig"); return j.elevation;
+  }
+  async function buildings(cam,tgt){
+    const b=Geo.bearing(cam,tgt), w=30;
+    const poly=[Geo.dest(cam,(b+270)%360,w),Geo.dest(cam,(b+90)%360,w),Geo.dest(tgt,(b+90)%360,w),Geo.dest(tgt,(b+270)%360,w)]
+      .map(p=>`${p.lat.toFixed(6)} ${p.lon.toFixed(6)}`).join(" ");
+    const q=`[out:json][timeout:25];(way["building"](poly:"${poly}");way["building:part"](poly:"${poly}"););out tags geom;`;
+    const r=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:"data="+encodeURIComponent(q),headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+    if(!r.ok) throw new Error("Gebäudedaten nicht abrufbar");
+    const j=await r.json(); return (j.elements||[]).filter(e=>Array.isArray(e.geometry)&&e.geometry.length>2);
+  }
+  const TYPE_H={house:8,detached:8,residential:12,apartments:16,terrace:9,garage:3,garages:3,shed:3,roof:4,commercial:15,office:20,retail:8,industrial:10,warehouse:9,school:12,university:15,hospital:20,church:25,cathedral:60,chapel:10,train_station:12,stadium:25,hotel:20,public:15,civic:15,kiosk:3,hut:3,carport:3,yes:10};
+  function heightOf(t){
+    const num=v=>{ const n=parseFloat(String(v).replace(",",".")); return isFinite(n)?n:null; };
+    const h=num(t.height); if(h!=null) return {h, est:false};
+    const lv=num(t["building:levels"]); if(lv!=null) return {h:lv*3.2+(num(t["roof:levels"])||0)*2.5+1, est:true};
+    const ty=t.building||t["building:part"]||"yes"; return {h:TYPE_H[ty]??10, est:true};
+  }
+  function check(cam,tgt,H,eye,moonAlt,elevs,blds){
+    const d=Geo.dist(cam,tgt), lat0=cam.lat*Math.PI/180;
+    const xy=p=>[(p.lon-cam.lon)*Math.cos(lat0)*111320,(p.lat-cam.lat)*111320];
+    const T=xy(tgt), n=elevs.length;
+    const groundAt=x=>{ const f=Math.max(0,Math.min(n-1,x/d*(n-1))), i=Math.floor(f), j=Math.min(n-1,i+1); return elevs[i]+(elevs[j]-elevs[i])*(f-i); };
+    const E=elevs[0]+eye, tgtG=elevs[n-1], topAbs=tgtG+H;
+    const inPoly=(pt,poly)=>{ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j];
+      if(((yi>pt[1])!==(yj>pt[1])) && (pt[0]<(xj-xi)*(pt[1]-yi)/(yj-yi)+xi)) c=!c; } return c; };
+    const entry=poly=>{ let best=null; for(let i=0;i<poly.length-1;i++){ const [x1,y1]=poly[i],[x2,y2]=poly[i+1];
+        const den=T[0]*(y2-y1)-T[1]*(x2-x1); if(Math.abs(den)<1e-9) continue;
+        const t=(x1*(y2-y1)-y1*(x2-x1))/den, u=(x1*T[1]-y1*T[0])/den;
+        if(t>=0&&t<=1&&u>=0&&u<=1){ if(best===null||t<best) best=t; } } return best; };
+    const obstacles=[], onLine=[];
+    for(const b of (blds||[])){
+      const poly=b.geometry.map(g=>xy(g)); const t=entry(poly); if(t===null) continue;
+      if(inPoly([0,0],poly) || inPoly(T,poly)) continue;
+      const x=t*d; if(x<5 || x>d-30) continue;
+      const {h,est}=heightOf(b.tags||{}); const top=groundAt(x)+h;
+      const o={x,top,kind:"building",h,est,name:b.tags?.name||"",geom:b.geometry}; obstacles.push(o); onLine.push(o);
+    }
+    for(let i=1;i<n-1;i++){ const x=i/(n-1)*d; if(x<150||x>d-150) continue; obstacles.push({x,top:elevs[i]-5,kind:"terrain"}); }
+    const app=o=>o.top-curv(o.x), tgtGa=tgtG-curv(d), topA=topAbs-curv(d);
+    let req=-Infinity, worst=null;
+    for(const o of obstacles){ const r=E+(app(o)-E)*d/o.x; o.reqAbove=r-tgtGa; if(r>req){req=r;worst=o;} }
+    const visibleFrom=Math.max(0, req-tgtGa);
+    const angleTop=Math.atan2(topA-E,d)*180/Math.PI;
+    for(const o of onLine){ o.blocksTop = o.reqAbove>=H-1; o.blocksPart = !o.blocksTop && o.reqAbove>0; }
+    let moon=null;
+    if(moonAlt!=null){ const tan=Math.tan(moonAlt*Math.PI/180);
+      const blockers=obstacles.filter(o=>app(o)>E+o.x*tan).sort((a,b)=>a.x-b.x);
+      moon={alt:moonAlt, blocked:blockers, needed:angleTop, dIdeal:(topAbs-E)/tan}; }
+    const blockers=obstacles.filter(o=>o.reqAbove>0).sort((a,b)=>b.reqAbove-a.reqAbove);
+    return {d,E,eye,camG:elevs[0],tgtG,topAbs,H,visibleFrom,topVisible:visibleFrom<H-1,angleTop,blockers,onLine,moon,elevs,curv,groundAt};
+  }
+  async function run(cam,tgt,H,eye,moonAlt){
+    const d=Geo.dist(cam,tgt), n=Math.min(100,Math.max(20,Math.ceil(d/60)+1));
+    const pts=[]; for(let i=0;i<n;i++){ const f=i/(n-1); pts.push({lat:cam.lat+(tgt.lat-cam.lat)*f, lon:cam.lon+(tgt.lon-cam.lon)*f}); }
+    const [ev,bl]=await Promise.allSettled([elev(pts), buildings(cam,tgt)]);
+    if(ev.status!=="fulfilled") throw ev.reason;
+    const res=check(cam,tgt,H,eye,moonAlt,ev.value, bl.status==="fulfilled"? bl.value : null);
+    res.buildingsOk = bl.status==="fulfilled"; return res;
+  }
+  function profileSVG(r){
+    const W=640,Hh=180,px=12,py=14, n=r.elevs.length;
+    const vals=[r.E, r.topAbs-r.curv(r.d), ...r.elevs.map((e,i)=>e-r.curv(i/(n-1)*r.d)), ...r.onLine.map(o=>o.top-r.curv(o.x))];
+    let lo=Math.min(...vals)-5, hi=Math.max(...vals)+10; if(hi-lo<30) hi=lo+30;
+    const X=x=>px+x/r.d*(W-2*px), Y=v=>Hh-py-(v-lo)/(hi-lo)*(Hh-2*py);
+    const terr=r.elevs.map((e,i)=>{const x=i/(n-1)*r.d; return `${X(x).toFixed(1)},${Y(e-r.curv(x)).toFixed(1)}`;});
+    let svg=`<svg class="profile" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Höhenprofil zwischen Kamera und Motiv">`;
+    svg+=`<polygon points="${X(0)},${Hh-py} ${terr.join(" ")} ${X(r.d)},${Hh-py}" fill="var(--line)" />`;
+    for(const o of r.onLine){ const g=r.groundAt(o.x)-r.curv(o.x), t=o.top-r.curv(o.x);
+      svg+=`<rect x="${(X(o.x)-2).toFixed(1)}" y="${Y(t).toFixed(1)}" width="4" height="${Math.max(1,Y(g)-Y(t)).toFixed(1)}" fill="${o.blocksTop?"var(--bad)":o.blocksPart?"var(--warn)":"var(--muted)"}" />`; }
+    const tg=r.tgtG-r.curv(r.d), tt=r.topAbs-r.curv(r.d);
+    svg+=`<line x1="${X(r.d)}" y1="${Y(tg)}" x2="${X(r.d)}" y2="${Y(tt)}" stroke="var(--gold)" stroke-width="4" />`;
+    svg+=`<line x1="${X(0)}" y1="${Y(r.E)}" x2="${X(r.d)}" y2="${Y(tt)}" stroke="var(--blue)" stroke-width="2" />`;
+    if(r.visibleFrom>0) svg+=`<line x1="${X(0)}" y1="${Y(r.E)}" x2="${X(r.d)}" y2="${Y(tg+Math.min(r.visibleFrom,r.H))}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4" />`;
+    if(r.moon){ const end=r.E+r.d*Math.tan(r.moon.alt*Math.PI/180); const ye=Math.max(py, Y(Math.min(end,hi)));
+      svg+=`<line x1="${X(0)}" y1="${Y(r.E)}" x2="${X(r.d)}" y2="${ye}" stroke="#8e9ac4" stroke-width="2" stroke-dasharray="2 4" />`; }
+    svg+=`<circle cx="${X(0)}" cy="${Y(r.E)}" r="4" fill="var(--blue)" />`;
+    svg+=`<text x="${px}" y="11" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono,monospace">${Math.round(hi)} m</text><text x="${px}" y="${Hh-2}" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono,monospace">${Math.round(lo)} m · Kamera</text><text x="${W-px}" y="${Hh-2}" font-size="10" text-anchor="end" fill="var(--muted)" font-family="IBM Plex Mono,monospace">Motiv · ${Geo.km(r.d)}</text>`;
+    return svg+`</svg>`;
+  }
+  return {run, check, profileSVG, heightOf};
+})();
+
 /* ================= PLANNER (map) ================= */
 const Optics={
   vfov:f=>2*Math.atan(12/f)*180/Math.PI,   // full frame, landscape: 24 mm high
@@ -720,7 +929,7 @@ const Optics={
 };
 const Plan=(()=>{
   const st={target:null,cam:null,mode:"target",t:Date.now(),editingId:null,name:""};
-  let map=null, over=null, mk={}, fitted=false;
+  let map=null, over=null, skyL=null, sightL=null, sightKey="", mk={}, fitted=false;
   const LL=p=>[p.lat,p.lon];
   const icon=c=>window.L.divIcon({className:"",html:`<div class="mk ${c}"></div>`,iconSize:[20,20],iconAnchor:[10,10]});
   function toLocalInput(ms){const d=new Date(ms); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16);}
@@ -732,7 +941,7 @@ const Plan=(()=>{
     if(!window.L){ $("plan-err").textContent="Karte konnte nicht geladen werden. Prüfe die Internetverbindung und lade die Seite neu."; return false; }
     map=window.L.map("plan-map").setView([48.1374,11.5755],13);
     window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
-    over=window.L.layerGroup().addTo(map);
+    over=window.L.layerGroup().addTo(map); skyL=window.L.layerGroup().addTo(map); sightL=window.L.layerGroup().addTo(map);
     map.on("click",e=>{ const p={lat:e.latlng.lat,lon:e.latlng.lng};
       if(st.mode==="target"){ st.target=p; if(!st.cam) setMode("cam"); } else st.cam=p; draw(); });
     return true;
@@ -748,6 +957,7 @@ const Plan=(()=>{
   function draw(dragging){
     if(!map) return;
     over.clearLayers();
+    if(sightKey && sightKey!==curKey()){ sightL.clearLayers(); sightKey=""; $("s-res").innerHTML=`<p class="small muted">Kamera oder Motiv verschoben. Tippe auf „Sicht prüfen“.</p>`; }
     marker("target",st.target,"t","Motiv"); marker("cam",st.cam,"c","Kamera");
     const H=Math.max(0,Number($("plan-h").value)||0), f=Math.max(8,Number($("plan-f").value)||50), facts=[];
     const css=getComputedStyle(document.documentElement), C={blue:css.getPropertyValue("--blue").trim(),gold:css.getPropertyValue("--gold").trim(),muted:css.getPropertyValue("--muted").trim()};
@@ -798,7 +1008,7 @@ const Plan=(()=>{
     for(let i=0;i<4;i++){ const w=Astro.windows(midnight(i),p.lat,p.lon)[key]; if(w && w.end>Date.now()) return (w.start+w.end)/2; }
     return Date.now();
   }
-  function show(){ if(!init()) return; setTimeout(()=>{ map.invalidateSize(); draw(); },50); }
+  function show(){ if(!init()) return; setTimeout(()=>{ map.invalidateSize(); draw(); fillSkyEvents(); },50); }
   function open(o){
     st.target=o.target?{lat:o.target.lat,lon:o.target.lon}:null; st.cam=o.cam?{...o.cam}:null; st.editingId=o.id||null; st.name=o.name||""; fitted=false;
     if(o.h!=null) $("plan-h").value=o.h;
@@ -825,12 +1035,99 @@ const Plan=(()=>{
       $("f-th").value=$("plan-h").value; updateGeoHint();
     });
   }
+  const curKey=()=>JSON.stringify([st.cam,st.target,$("plan-h").value,$("s-eye").value]);
+  async function runSight(){
+    const stEl=$("s-status");
+    if(!st.cam||!st.target){ stEl.textContent="Setze zuerst Motiv und Kamera."; return; }
+    const H=Math.max(0,Number($("plan-h").value)||0), eye=Math.max(0,Number($("s-eye").value)||0);
+    const mo=Astro.moon(st.t,st.target.lat,st.target.lon);
+    stEl.textContent="Prüfe Gelände und Gebäude …"; sightL.clearLayers(); $("s-res").innerHTML="";
+    try{ const r=await Sight.run(st.cam,st.target,H,eye, mo.alt>0? mo.alt : null); sightKey=curKey(); stEl.textContent=""; renderSight(r); }
+    catch(e){ stEl.textContent=""; $("s-res").innerHTML=`<p class="err">${esc(e.message||"Prüfung fehlgeschlagen")}. Prüfe die Verbindung und versuche es erneut.</p>`; }
+  }
+  function renderSight(r){
+    const css=getComputedStyle(document.documentElement), col=k=>css.getPropertyValue("--"+k).trim();
+    window.L.polyline([LL(st.cam),LL(st.target)],{color:r.topVisible?col("ok"):col("bad"),weight:5,opacity:.7}).bindTooltip(r.topVisible?"Spitze frei sichtbar":"Spitze verdeckt").addTo(sightL);
+    for(const o of r.onLine){ const c=o.blocksTop?col("bad"):o.blocksPart?col("warn"):col("muted");
+      window.L.polygon(o.geom.map(g=>[g.lat,g.lon]),{color:c,weight:2,fillColor:c,fillOpacity:o.blocksTop||o.blocksPart?.45:.15})
+        .bindTooltip(`${o.name?esc(o.name)+" · ":""}${Math.round(o.h)} m hoch${o.est?" (geschätzt)":""} · ${Geo.km(o.x)} von dir`).addTo(sightL); }
+    const n1=v=>v.toFixed(1).replace(".",",");
+    const status = r.topVisible
+      ? (r.visibleFrom>1? `<span class="dot warn"></span> Spitze sichtbar, das Motiv ist ab ca. ${Math.round(r.visibleFrom)} m über Grund zu sehen` : `<span class="dot ok"></span> Freie Sicht auf das ganze Motiv`)
+      : `<span class="dot bad"></span> Spitze verdeckt`;
+    const items=r.blockers.slice(0,4).map(o=> o.kind==="building"
+      ? `<li>Gebäude${o.name?` „${esc(o.name)}“`:""} · ${Geo.km(o.x)} von dir · ${Math.round(o.h)} m${o.est?" (geschätzt)":""} · verdeckt bis ${Math.round(Math.min(o.reqAbove,r.H))} m</li>`
+      : `<li>Gelände · ${Geo.km(o.x)} von dir · verdeckt bis ${Math.round(Math.min(o.reqAbove,r.H))} m</li>`).join("");
+    let moonHtml="";
+    if(r.moon){
+      const diff=r.moon.alt-r.moon.needed;
+      const pos = Math.abs(diff)<0.25? "steht genau auf Höhe der Spitze" : diff>0? `steht ${n1(diff)}° über der Spitze` : `steht ${n1(-diff)}° unter der Spitze`;
+      moonHtml=`<p class="small" style="margin:8px 0 0"><b>Mond zur gewählten Zeit:</b> ${n1(r.moon.alt)}° hoch, für die Spitze nötig ${n1(r.moon.needed)}°. Er ${pos}.`;
+      if(r.moon.blocked.length){ const b=r.moon.blocked[0]; moonHtml+=` Der Blick zum Mond wird ${b.kind==="building"?"von einem Gebäude":"vom Gelände"} in ${Geo.km(b.x)} verdeckt.`; }
+      const dd=r.moon.dIdeal-r.d;
+      if(isFinite(r.moon.dIdeal) && r.moon.dIdeal>50 && Math.abs(dd)>15){
+        moonHtml+=` Für den Mond genau hinter der Spitze stehst du ca. ${Geo.km(Math.abs(dd))} zu ${dd>0?"nah":"weit weg"}.</p>
+          <div class="row"><button type="button" id="s-move">Kamera ${dd>0?"weiter weg":"näher"} setzen (${Geo.km(r.moon.dIdeal)} vom Motiv)</button></div>`;
+      } else moonHtml+="</p>";
+    }
+    $("s-res").innerHTML=`<p style="margin:8px 0 4px">${status}</p>
+      <div class="meta">Kamera ${Math.round(r.camG)} m ü. NN (+${n1(r.eye)} m) · Motiv-Fuß ${Math.round(r.tgtG)} m · Spitze ${Math.round(r.topAbs)} m · Blickwinkel zur Spitze ${n1(r.angleTop)}°</div>
+      ${items?`<ul class="plain blk" style="margin-top:6px">${items}</ul>`:""}
+      ${r.buildingsOk?"":`<p class="err">Gebäudedaten gerade nicht abrufbar, nur das Gelände wurde geprüft.</p>`}
+      ${moonHtml}${Sight.profileSVG(r)}
+      <div class="hint">Profil überhöht. Blau: Sicht zur Spitze. Gestrichelt: tiefster sichtbarer Punkt. Punktiert: Richtung Mond. Rot/orange: Gebäude, die die Spitze bzw. den unteren Teil verdecken.</div>`;
+    const mv=$("s-move"); if(mv) mv.addEventListener("click",()=>{ const b=Geo.bearing(st.target,st.cam); st.cam=Geo.dest(st.target,b,r.moon.dIdeal); draw(); runSight(); });
+  }
+  function fillSkyEvents(){
+    const p=st.cam||st.target||(map? {lat:map.getCenter().lat,lon:map.getCenter().lng}:{lat:48.1374,lon:11.5755});
+    const sel=$("sky-ev"), prev=sel.value; const evs=Sky.events(p,6);
+    sel.innerHTML=evs.map(e=>`<option value="${e.type}|${e.t}">${esc(Sky.label(e))}</option>`).join("");
+    if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
+  }
+  let skyAnchor=null;
+  async function runSky(){
+    const p=st.cam||st.target||(map? {lat:map.getCenter().lat,lon:map.getCenter().lng}:null);
+    if(!p){ $("sky-status").textContent="Setze zuerst einen Standort."; return; }
+    if(!$("sky-ev").value) fillSkyEvents();
+    const [type,ts]=$("sky-ev").value.split("|"), t=Number(ts);
+    const az=Astro.sun(t,p.lat,p.lon).az;
+    $("sky-status").textContent="Lade Wolken …"; $("sky-res").innerHTML=""; skyL.clearLayers();
+    try{
+      const rays=await Sky.load(p,[az]), ser=Sky.at(rays[0],t);
+      $("sky-status").textContent="";
+      if(!ser){ $("sky-res").innerHTML=`<p class="small muted">Für diesen Termin gibt es noch keine Vorhersage.</p>`; return; }
+      const r=Sky.evaluate(ser); $("sky-res").innerHTML=Sky.meters(r,type);
+      const css=getComputedStyle(document.documentElement), col=v=>css.getPropertyValue("--"+Sky.cls(v)).trim();
+      const end=Geo.dest(p,az,400000);
+      window.L.polyline([LL(p),LL(end)],{color:css.getPropertyValue("--gold").trim(),weight:2,dashArray:"4 6"}).bindTooltip(`Richtung Sonne ${Math.round(az)}°`).addTo(skyL);
+      window.L.polyline([LL(p),LL(Geo.dest(p,az,50000))],{color:col(r.fC),weight:12,opacity:.35}).bindTooltip(`Wolken-Leinwand 0–50 km: ${Math.round(r.canvas)} % mittel/hoch`).addTo(skyL);
+      window.L.polyline([LL(Geo.dest(p,az,150000)),LL(end)],{color:col(r.fF),weight:12,opacity:.35}).bindTooltip(`Lichtlücke 150–400 km: ${Math.round(r.blockF)} % verdeckt`).addTo(skyL);
+      for(const x of ser){
+        const bar=k=>`<i class="${k}" style="height:${Math.max(2,Math.round(x[k]*0.22))}px"></i>`;
+        window.L.marker([x.lat,x.lon],{icon:window.L.divIcon({className:"",html:`<div class="cbar">${bar("low")}${bar("mid")}${bar("high")}</div>`,iconSize:[24,28],iconAnchor:[12,28]})})
+          .bindTooltip(`${x.km} km: tief ${x.low} %, mittel ${x.mid} %, hoch ${x.high} %`).addTo(skyL);
+      }
+      skyAnchor=p;
+      map.fitBounds(window.L.latLngBounds([LL(p),LL(end)]).pad(0.1));
+    }catch(e){ $("sky-status").textContent=""; $("sky-res").innerHTML=`<p class="err">${esc(e.message)}</p>`; }
+  }
+  function openSky(p){
+    st.cam={lat:p.lat,lon:p.lon}; st.target=null; st.editingId=null; st.name=""; fitted=false; setMode("target"); showTab("plan");
+    setTimeout(()=>{ if(!map) return; fillSkyEvents(); runSky(); $("sky-box").scrollIntoView({behavior:"smooth",block:"start"}); },120);
+  }
+  function wireExtra(){
+    $("s-run").addEventListener("click",runSight);
+    $("sky-run").addEventListener("click",runSky);
+    $("sky-zoom").addEventListener("click",()=>{ const p=skyAnchor||st.cam||st.target; if(map&&p) map.setView(LL(p),13); });
+    $("sky-ev").addEventListener("focus",fillSkyEvents);
+  }
   function applySuggestion(sg){
     st.t=sg.t; $("plan-time").value=toLocalInput(sg.t);
     if(sg.cam) st.cam=sg.cam;
     fitted=false; draw();
     if(map && st.cam && st.target) map.fitBounds(window.L.latLngBounds([LL(st.cam),LL(st.target)]).pad(0.3));
     $("plan-map").scrollIntoView({behavior:"smooth",block:"center"});
+    runSight();
   }
   async function findBest(){
     const err=$("plan-err"); err.textContent="";
@@ -879,14 +1176,14 @@ const Plan=(()=>{
     $("b-list").addEventListener("keydown",e=>{ if(e.key==="Enter"){ const li=e.target.closest("[data-best]"); if(li) pick(li);} });
     $("b-where").addEventListener("change",()=>{ const free=$("b-where").value==="free"; $("b-dmin").disabled=!free; $("b-dmax").disabled=!free; });
   }
-  return {show, open, wire, draw, wireBest};
+  return {show, open, wire, draw, wireBest, wireExtra, openSky};
 })();
 
 /* ================= TABS & BOOT ================= */
 function showTab(tab){ for(const t of ["spots","here","plan"]){ $("view-"+t).hidden = t!==tab; $("tab-"+t).setAttribute("aria-selected", t===tab); }
   if(tab==="plan") Plan.show(); }
 $("tab-spots").addEventListener("click",()=>showTab("spots")); $("tab-here").addEventListener("click",()=>showTab("here")); $("tab-plan").addEventListener("click",()=>showTab("plan"));
-Plan.wire(); Plan.wireBest();
+Plan.wire(); Plan.wireBest(); Plan.wireExtra();
 $("f-plan").addEventListener("click",()=>{ const c=Geo.parse($("f-cam").value), t=Geo.parse($("f-target").value);
   const o={cam:c,target:t,h:Number($("f-th").value)||0,name:$("f-name").value.trim(),id:editing?.id}; $("editor").close(); Plan.open(o); });
 $("today").textContent=new Date().toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"});
