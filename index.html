@@ -109,6 +109,15 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
 .facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin-top:10px}
 .facts dt{color:var(--muted)}.facts dd{margin:0;font:13px var(--mono);text-align:right}
 .leaflet-tooltip{font:12px var(--body)}
+.best{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.best h3{font:600 20px var(--display);margin:0 0 6px}
+.best select{font:14px var(--body);padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+.best-list li{display:flex;gap:10px;align-items:flex-start;padding:9px 6px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:6px}
+.best-list li:hover,.best-list li:focus-visible{background:var(--bg)}
+.best-list li.sel{background:var(--blue-soft)}
+.best-list .when{font:600 15px var(--body)}
+.best-list .t{flex:1;min-width:0}
+.best-list .w{font:12px var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -186,6 +195,25 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
         <button type="button" class="primary" id="plan-save">Als Spot speichern</button>
       </div>
       <p class="err" id="plan-err"></p>
+
+      <div class="best">
+        <h3>Beste Zeit finden</h3>
+        <div class="plan-ctl">
+          <div><label for="b-body">Was soll hinter dem Motiv stehen?</label>
+            <select id="b-body"><option value="moon">Mond</option><option value="sun">Sonne (Auf-/Untergang)</option></select></div>
+          <div><label for="b-where">Standort</label>
+            <select id="b-where"><option value="free">Vorschlagen, wo ich stehen soll</option><option value="fixed">Von meinem gesetzten Kamera-Standort</option></select></div>
+          <div><label for="b-illum">Mond mindestens beleuchtet (%)</label><input type="number" id="b-illum" value="95" min="0" max="100"></div>
+          <div><label for="b-dmin">Entfernung von … km</label><input type="number" id="b-dmin" value="1" min="0.2" step="0.1"></div>
+          <div><label for="b-dmax">… bis km</label><input type="number" id="b-dmax" value="6" min="0.5" step="0.5"></div>
+          <div><label for="b-days">Zeitraum</label>
+            <select id="b-days"><option value="60">2 Monate</option><option value="180" selected>6 Monate</option><option value="365">12 Monate</option></select></div>
+        </div>
+        <div class="chk"><input type="checkbox" id="b-twi" checked><label for="b-twi">Nur in der Dämmerung (goldene und blaue Stunde)</label></div>
+        <div class="row" style="margin-top:6px"><button type="button" class="primary" id="b-run">Vorschläge suchen</button><span class="small muted" id="b-status"></span></div>
+        <ul class="plain best-list" id="b-list"></ul>
+        <p class="hint">Wetter gibt es für die nächsten 16 Tage, gemessen am Motiv. Einen Vorschlag antippen: Uhrzeit und Kamera-Standort werden auf der Karte gesetzt. Bei der Sonne nie ungeschützt durchs Tele schauen.</p>
+      </div>
     </div>
   </section>
 
@@ -332,7 +360,45 @@ const Astro = (() => {
     if(cur) out.push(cur);
     return out;
   }
-  return {sun, moon, windows, moonAlignments};
+  // Where & when does a body stand behind a target of height H (observer at target, camera on the opposite ray)?
+  function findBehind(o){ // o: {lat,lon,H,body,minIllum,dmin,dmax,from,days,twilightOnly}
+    const amin=Math.atan2(o.H,o.dmax)*D, amax=Math.atan2(o.H,o.dmin)*D, out=[]; let cur=null;
+    const flush=()=>{ if(cur){ out.push(cur); cur=null; } };
+    for(let t=o.from; t<o.from+o.days*86400000; ){
+      const s=sun(t,o.lat,o.lon).alt;
+      const twi = s<=6 && s>=-10;
+      if(o.twilightOnly && !twi){ flush(); t+= (s>15||s<-20)? 1800000 : 300000; continue; }
+      const b = o.body==="moon"? moon(t,o.lat,o.lon) : {...sun(t,o.lat,o.lon), alt:sun(t,o.lat,o.lon).alt+refr(sun(t,o.lat,o.lon).alt), illum:1};
+      const ok = b.alt>=amin && b.alt<=amax && b.alt>0.2 && b.illum>=o.minIllum && (o.body==="sun" || s<6);
+      if(ok){
+        const score = (o.body==="moon"? (Math.abs(s+6)) : 0) + Math.abs(b.alt-(amin+amax)/2)*0.15;
+        if(!cur || t-cur.last>3*3600000){ flush(); cur={t,score,last:t,first:t,az:b.az,alt:b.alt,illum:b.illum,sun:s}; }
+        else { cur.last=t; if(score<cur.score) Object.assign(cur,{t,score,az:b.az,alt:b.alt,illum:b.illum,sun:s}); }
+        t+=120000;
+      } else { if(cur && t-cur.last>3*3600000) flush(); t+=120000; }
+    }
+    flush();
+    return out.map(e=>({...e, dist:o.H/Math.tan(e.alt*R), camBearing:(e.az+180)%360}));
+  }
+  // From a fixed camera: when is the body behind the target?
+  function findBehindFixed(o){ // o: {cam:{lat,lon}, bearing, angle, body, minIllum, from, days, twilightOnly}
+    const out=[]; let cur=null; const lo=Math.max(0.2,o.angle*0.5), hi=o.angle+0.4;
+    for(let t=o.from; t<o.from+o.days*86400000; ){
+      const s=sun(t,o.cam.lat,o.cam.lon).alt;
+      if(o.twilightOnly && (s>6||s<-10)){ if(cur){out.push(cur);cur=null;} t+=(s>15||s<-20)?1800000:300000; continue; }
+      let b; if(o.body==="moon") b=moon(t,o.cam.lat,o.cam.lon); else { const x=sun(t,o.cam.lat,o.cam.lon); b={az:x.az,alt:x.alt+refr(x.alt),illum:1}; }
+      const daz=Math.abs(((b.az-o.bearing+540)%360)-180);
+      if(daz<0.5 && b.alt>=lo && b.alt<=hi && b.illum>=o.minIllum){
+        const score=daz+Math.abs(b.alt-o.angle)*0.3;
+        if(!cur || t-cur.last>3600000){ if(cur) out.push(cur); cur={t,score,last:t,first:t,az:b.az,alt:b.alt,illum:b.illum,sun:s}; }
+        else { cur.last=t; if(score<cur.score) Object.assign(cur,{t,score,az:b.az,alt:b.alt,illum:b.illum,sun:s}); }
+        t+=60000;
+      } else t += daz>8? 600000 : 60000;
+    }
+    if(cur) out.push(cur);
+    return out;
+  }
+  return {sun, moon, windows, moonAlignments, findBehind, findBehindFixed};
 })();
 
 /* ================= GEO HELPERS ================= */
@@ -382,7 +448,14 @@ const Weather = (() => {
     if(bd>90*60000) return null;
     const o={}; for(const k in w.hourly) o[k]=w.hourly[k][best]; return o;
   }
-  return {get, foehn, at};
+  const longCache=new Map();
+  async function long(p){
+    const key=p.lat.toFixed(2)+","+p.lon.toFixed(2); const c=longCache.get(key);
+    if(c && Date.now()-c.at<60*60000) return c.data;
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat.toFixed(3)}&longitude=${p.lon.toFixed(3)}&hourly=cloud_cover,cloud_cover_low,precipitation_probability&forecast_days=16&timeformat=unixtime&timezone=GMT`);
+    if(!r.ok) throw new Error("Wetter nicht abrufbar"); const j=await r.json(); longCache.set(key,{at:Date.now(),data:j}); return j;
+  }
+  return {get, foehn, at, long};
 })();
 
 /* ================= RATING ================= */
@@ -752,14 +825,68 @@ const Plan=(()=>{
       $("f-th").value=$("plan-h").value; updateGeoHint();
     });
   }
-  return {show, open, wire, draw};
+  function applySuggestion(sg){
+    st.t=sg.t; $("plan-time").value=toLocalInput(sg.t);
+    if(sg.cam) st.cam=sg.cam;
+    fitted=false; draw();
+    if(map && st.cam && st.target) map.fitBounds(window.L.latLngBounds([LL(st.cam),LL(st.target)]).pad(0.3));
+    $("plan-map").scrollIntoView({behavior:"smooth",block:"center"});
+  }
+  async function findBest(){
+    const err=$("plan-err"); err.textContent="";
+    if(!st.target){ err.textContent="Setze zuerst das Motiv auf der Karte."; return; }
+    const H=Number($("plan-h").value)||0; if(H<=0){ err.textContent="Trage die Höhe des Motivs ein, z. B. 291 m für den Olympiaturm."; return; }
+    const body=$("b-body").value, where=$("b-where").value, days=Number($("b-days").value)||180, twi=$("b-twi").checked;
+    const minIllum = body==="moon"? Math.min(1,Math.max(0,(Number($("b-illum").value)||0)/100)) : 0;
+    if(where==="fixed" && !st.cam){ err.textContent="Setze zuerst deinen Kamera-Standort oder wähle „Vorschlagen, wo ich stehen soll“."; return; }
+    $("b-status").textContent="Rechne …"; $("b-list").innerHTML=""; await new Promise(r=>setTimeout(r,30));
+    const from=Date.now(); let res;
+    if(where==="free"){
+      const dmin=Math.max(0.2,Number($("b-dmin").value)||1)*1000, dmax=Math.max(dmin+100,(Number($("b-dmax").value)||6)*1000);
+      res=Astro.findBehind({lat:st.target.lat,lon:st.target.lon,H,body,minIllum,dmin,dmax,from,days,twilightOnly:twi})
+        .map(e=>({...e, cam:Geo.dest(st.target,e.camBearing,e.dist)}));
+    } else {
+      const d=Geo.dist(st.cam,st.target), b=Geo.bearing(st.cam,st.target), a=Math.atan2(H,d)*180/Math.PI;
+      res=Astro.findBehindFixed({cam:st.cam,bearing:b,angle:a,body,minIllum,from,days,twilightOnly:twi}).map(e=>({...e, cam:null, dist:d, camBearing:(b+180)%360}));
+    }
+    best=res.slice(0,40);
+    if(!best.length){ $("b-status").textContent="";
+      $("b-list").innerHTML=`<li style="cursor:default"><div class="t muted small">${where==="fixed"? "Von diesem Standort steht der "+(body==="moon"?"Mond":"Sonne")+" im Zeitraum nie hinter dem Motiv. Versuche „Vorschlagen, wo ich stehen soll“ oder einen anderen Standort."
+        : "Keine passenden Zeitpunkte. Vergrößere den Entfernungsbereich, den Zeitraum oder senke die Mond-Beleuchtung."}</div></li>`; return; }
+    $("b-status").textContent=`${best.length} Termine gefunden`;
+    renderBest(null);
+    try{ const w=await Weather.long(st.target); renderBest(w); }catch(e){ /* keep without weather */ }
+  }
+  let best=[];
+  function phase(sun){ return sun>-4? (sun>0?"Sonne über Horizont":"Goldene Stunde") : sun>=-8? "Blaue Stunde" : sun>=-12? "Späte Dämmerung" : "Nacht"; }
+  function renderBest(w){
+    const body=$("b-body").value;
+    $("b-list").innerHTML=best.map((e,i)=>{
+      let wx=""; if(w){ const h=Weather.at(w,e.t); if(h){ const r=overall(evalCriteria({crit:{...DEFAULT_CRIT(),clear:{on:true,max:30},low:{on:true,max:20},rain:{on:true,max:30}}},h,null));
+          wx=`<span class="dot ${r}"></span> ${h.cloud_cover} % Wolken`; } }
+      if(!wx) wx = e.t-Date.now() < 16*86400000 ? "Wetter lädt …" : "Wetter erst ab 16 Tagen vorher";
+      const dirFromTarget = Geo.dir(e.camBearing);
+      return `<li tabindex="0" data-best="${i}"><div class="t"><div class="when">${new Date(e.t).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"2-digit"})} · ${fmtT(e.t)}</div>
+        <div class="meta">${body==="moon"?`Mond ${Math.round(e.illum*100)} % · `:"Sonne · "}${e.alt.toFixed(1).replace(".",",")}° hoch · ${phase(e.sun)}</div>
+        <div class="meta">Standort ${Geo.km(e.dist)} ${dirFromTarget} vom Motiv</div></div><div class="w">${wx}</div></li>`;
+    }).join("");
+  }
+  function wireBest(){
+    $("b-run").addEventListener("click",findBest);
+    $("b-body").addEventListener("change",()=>{ $("b-illum").disabled=$("b-body").value!=="moon"; });
+    const pick=li=>{ document.querySelectorAll(".best-list li").forEach(x=>x.classList.remove("sel")); li.classList.add("sel"); applySuggestion(best[+li.dataset.best]); };
+    $("b-list").addEventListener("click",e=>{ const li=e.target.closest("[data-best]"); if(li) pick(li); });
+    $("b-list").addEventListener("keydown",e=>{ if(e.key==="Enter"){ const li=e.target.closest("[data-best]"); if(li) pick(li);} });
+    $("b-where").addEventListener("change",()=>{ const free=$("b-where").value==="free"; $("b-dmin").disabled=!free; $("b-dmax").disabled=!free; });
+  }
+  return {show, open, wire, draw, wireBest};
 })();
 
 /* ================= TABS & BOOT ================= */
 function showTab(tab){ for(const t of ["spots","here","plan"]){ $("view-"+t).hidden = t!==tab; $("tab-"+t).setAttribute("aria-selected", t===tab); }
   if(tab==="plan") Plan.show(); }
 $("tab-spots").addEventListener("click",()=>showTab("spots")); $("tab-here").addEventListener("click",()=>showTab("here")); $("tab-plan").addEventListener("click",()=>showTab("plan"));
-Plan.wire();
+Plan.wire(); Plan.wireBest();
 $("f-plan").addEventListener("click",()=>{ const c=Geo.parse($("f-cam").value), t=Geo.parse($("f-target").value);
   const o={cam:c,target:t,h:Number($("f-th").value)||0,name:$("f-name").value.trim(),id:editing?.id}; $("editor").close(); Plan.open(o); });
 $("today").textContent=new Date().toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"});
