@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1d2340">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lichtfenster">
+<title>Lichtfenster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column like a field notebook; spot cards carry a 3-day x 4-window light grid */
+:root{
+  --bg:#eef0f5; --surface:#ffffff; --ink:#1b2033; --muted:#5d6580; --line:#d7dbe6;
+  --blue:#2f4ba8; --blue-soft:#dfe5f7; --gold:#b9770e; --gold-soft:#f7ead2;
+  --ok:#2e8b57; --warn:#c48a00; --bad:#c0392b; --none:#b8bdcc;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12152a; --surface:#1b2038; --ink:#e7e9f3; --muted:#9aa1bd; --line:#2e3555;
+  --blue:#8ea6ff; --blue-soft:#273160; --gold:#f0b54a; --gold-soft:#3d3220;
+  --ok:#4fc184; --warn:#e6b23a; --bad:#ef6a5a; --none:#4a5170; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);
+  padding:env(safe-area-inset-top,0) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:720px;margin:0 auto}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:18px 10px}
+h1{font:700 30px/1 var(--display);letter-spacing:.02em;margin:0;text-transform:uppercase}
+h1 span{color:var(--gold)}
+.sub{color:var(--muted);font-size:13px}
+nav.tabs{display:flex;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px;margin-block:4px 16px}
+nav.tabs button{flex:1;border:0;background:none;color:var(--muted);font:600 15px var(--body);padding:9px;border-radius:7px;cursor:pointer}
+nav.tabs button[aria-selected=true]{background:var(--blue);color:#fff}
+button,.btn{font:500 14px var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 12px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.spot-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.spot-head h2{font:600 22px/1.1 var(--display);margin:0;letter-spacing:.01em}
+.meta{font:12px/1.4 var(--mono);color:var(--muted)}
+.grid{display:grid;grid-template-columns:72px repeat(4,1fr);gap:4px;margin-top:12px;font-size:12px}
+.grid .h{color:var(--muted);font:500 11px var(--mono);text-transform:uppercase;letter-spacing:.04em;text-align:center;padding-bottom:2px}
+.grid .d{font:500 12px var(--mono);color:var(--muted);align-self:center}
+.cell{border-radius:6px;padding:6px 4px;text-align:center;font:500 12px var(--mono);border:1px solid transparent;cursor:pointer;min-height:44px;display:flex;flex-direction:column;justify-content:center;background:var(--bg)}
+.cell b{font-weight:600;display:block}
+.cell.ok{background:color-mix(in srgb,var(--ok) 18%,var(--surface));border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+.cell.warn{background:color-mix(in srgb,var(--warn) 18%,var(--surface));border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.cell.bad{background:color-mix(in srgb,var(--bad) 12%,var(--surface));border-color:color-mix(in srgb,var(--bad) 30%,transparent)}
+.cell.off{opacity:.35;cursor:default}
+.cell.sel{outline:2px solid var(--ink)}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.dot.none{background:var(--none)}
+.detail{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.crit{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:14px}
+.crit .v{margin-left:auto;font:12px var(--mono);color:var(--muted);text-align:right}
+.pill{display:inline-block;font:500 11px var(--mono);padding:2px 7px;border-radius:99px;background:var(--blue-soft);color:var(--blue)}
+.pill.gold{background:var(--gold-soft);color:var(--gold)}
+.moon{margin-top:10px;font-size:14px}
+.moon li{margin:4px 0}
+ul.plain{list-style:none;padding:0;margin:0}
+.empty{color:var(--muted);text-align:center;padding:24px 8px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.err{color:var(--bad);font-size:13px}
+/* editor sheet */
+dialog{border:0;padding:0;background:transparent;max-width:720px;width:100%}
+dialog::backdrop{background:rgba(10,12,25,.55)}
+.sheet{background:var(--surface);color:var(--ink);border-radius:14px;padding:16px;max-height:88vh;overflow:auto}
+.sheet h3{font:600 22px var(--display);margin:0 0 10px}
+label.f{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=number],textarea{width:100%;font:15px var(--body);padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+input[type=number]{width:84px}
+textarea{min-height:120px;font:12px var(--mono)}
+fieldset{border:1px solid var(--line);border-radius:10px;margin:12px 0 0;padding:8px 12px 10px}
+legend{font:600 13px var(--body);color:var(--muted);padding:0 4px}
+.chk{display:flex;align-items:center;gap:8px;padding:6px 0;flex-wrap:wrap}
+.chk label{flex:1;min-width:160px}
+.chk .unit{font:12px var(--mono);color:var(--muted)}
+.hint{font-size:12px;color:var(--muted);margin-top:4px}
+.sug li{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.sug li:last-child{border-bottom:0}
+.sug .t{flex:1;min-width:0}
+.sug .t div{overflow-wrap:anywhere}
+.now{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:10px}
+.now div{background:var(--bg);border-radius:8px;padding:8px}
+.now b{display:block;font:600 20px var(--display)}
+.now span{font-size:12px;color:var(--muted)}
+.foot{color:var(--muted);font-size:12px;margin-top:18px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Licht<span>fenster</span></h1>
+    <span class="sub" id="today"></span>
+  </header>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-spots" aria-selected="true">Meine Spots</button>
+    <button role="tab" id="tab-here" aria-selected="false">Hier &amp; jetzt</button>
+  </nav>
+
+  <section id="view-spots">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <button class="primary" id="add-spot">+ Spot anlegen</button>
+      <div class="row">
+        <button id="refresh">Aktualisieren</button>
+        <button id="backup">Sichern</button>
+      </div>
+    </div>
+    <div id="spots"></div>
+    <p class="foot">Raster: <span class="pill">BS</span> blaue Stunde (Sonne −4° bis −8°), <span class="pill gold">GS</span> goldene Stunde (+6° bis −4°), jeweils morgens und abends. Farbe = deine Kriterien für diesen Spot. Antippen für Details.</p>
+  </section>
+
+  <section id="view-here" hidden>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div><b>Wo bin ich?</b><div class="meta" id="here-pos">Position noch nicht bestimmt</div></div>
+        <button class="primary" id="locate">Position bestimmen</button>
+      </div>
+      <div id="here-now"></div>
+    </div>
+    <div id="here-windows"></div>
+    <div class="card" id="here-own" hidden></div>
+    <div class="card" id="here-sug" hidden></div>
+  </section>
+
+  <p class="foot">Wetter: Open-Meteo · Motive: OpenStreetMap &amp; Wikipedia · Sonne/Mond werden im Gerät berechnet. Spots liegen nur auf diesem Gerät, darum ab und zu „Sichern“.</p>
+</div>
+
+<dialog id="editor"><form class="sheet" id="edit-form" method="dialog">
+  <h3 id="edit-title">Spot</h3>
+  <label class="f" for="f-name">Name</label>
+  <input type="text" id="f-name" required placeholder="z. B. Olympiaberg → Frauenkirche">
+  <label class="f" for="f-cam">Kamera-Standort (Koordinaten oder Google-Maps-Link)</label>
+  <div class="row"><input type="text" id="f-cam" placeholder="48.16950, 11.55060" style="flex:1"><button type="button" id="f-cam-gps">GPS</button></div>
+  <label class="f" for="f-target">Motiv / Ziel (optional, für Richtung und Mond)</label>
+  <input type="text" id="f-target" placeholder="48.13862, 11.57347">
+  <div class="chk"><label for="f-th">Höhe des Motivs über der Kamera</label><input type="number" id="f-th" value="50"><span class="unit">m</span></div>
+  <div class="hint" id="f-geo"></div>
+
+  <fieldset><legend>Wann?</legend>
+    <div class="chk"><input type="checkbox" id="w-bm"><label for="w-bm">Blaue Stunde morgens</label></div>
+    <div class="chk"><input type="checkbox" id="w-gm"><label for="w-gm">Goldene Stunde morgens</label></div>
+    <div class="chk"><input type="checkbox" id="w-ge"><label for="w-ge">Goldene Stunde abends</label></div>
+    <div class="chk"><input type="checkbox" id="w-be"><label for="w-be">Blaue Stunde abends</label></div>
+  </fieldset>
+
+  <fieldset><legend>Was muss passen?</legend>
+    <div class="chk"><input type="checkbox" id="c-clear"><label for="c-clear">Klarer Himmel, Bewölkung höchstens</label><input type="number" id="c-clear-v" value="30"><span class="unit">%</span></div>
+    <div class="chk"><input type="checkbox" id="c-low"><label for="c-low">Keine tiefen Wolken, höchstens</label><input type="number" id="c-low-v" value="15"><span class="unit">%</span></div>
+    <div class="chk"><input type="checkbox" id="c-vis"><label for="c-vis">Fernsicht mindestens</label><input type="number" id="c-vis-v" value="20"><span class="unit">km</span></div>
+    <div class="chk"><input type="checkbox" id="c-dry"><label for="c-dry">Trockene, klare Luft, Feuchte höchstens</label><input type="number" id="c-dry-v" value="60"><span class="unit">%</span></div>
+    <div class="chk"><input type="checkbox" id="c-foehn"><label for="c-foehn">Föhn (Alpen: Druck Bozen − Innsbruck ≥ 4 hPa)</label></div>
+    <div class="chk"><input type="checkbox" id="c-fog"><label for="c-fog">Nebel (Taupunktdifferenz ≤ 1,5 K und Wind schwach, oder Sicht &lt; 1 km)</label></div>
+    <div class="chk"><input type="checkbox" id="c-wind"><label for="c-wind">Wenig Wind, höchstens</label><input type="number" id="c-wind-v" value="15"><span class="unit">km/h</span></div>
+    <div class="chk"><input type="checkbox" id="c-rain"><label for="c-rain">Kein Regen, Wahrscheinlichkeit höchstens</label><input type="number" id="c-rain-v" value="30"><span class="unit">%</span></div>
+    <div class="chk"><input type="checkbox" id="c-moon"><label for="c-moon">Mond hinter dem Motiv suchen (nächste 120 Tage)</label></div>
+    <div class="hint">Wettermodelle melden Sichtweiten oft nur bis ca. 24 km. Für Alpenblick sind Föhn und trockene Luft die besseren Zeichen.</div>
+  </fieldset>
+  <label class="f" for="f-note">Notiz</label>
+  <input type="text" id="f-note" placeholder="Brennweite, Parken, Zugang …">
+  <p class="err" id="edit-err"></p>
+  <div class="row" style="justify-content:space-between;margin-top:12px">
+    <button type="button" id="edit-del">Löschen</button>
+    <div class="row"><button type="button" id="edit-cancel">Abbrechen</button><button class="primary" type="submit" id="edit-save">Speichern</button></div>
+  </div>
+</form></dialog>
+
+<dialog id="backup-dlg"><div class="sheet">
+  <h3>Sichern &amp; Übertragen</h3>
+  <p class="small muted">Kopiere den Text als Sicherung oder um deine Spots auf ein anderes Gerät zu übertragen. Zum Wiederherstellen Text einfügen und „Übernehmen“ tippen.</p>
+  <textarea id="backup-text" aria-label="Sicherung"></textarea>
+  <p class="err" id="backup-err"></p>
+  <div class="row" style="justify-content:flex-end;margin-top:10px">
+    <button type="button" id="backup-copy">Kopieren</button>
+    <button type="button" id="backup-import">Übernehmen</button>
+    <button type="button" class="primary" id="backup-close">Fertig</button>
+  </div>
+</div></dialog>
+
+<script>
+"use strict";
+/* ================= ASTRO (sun + moon, Meeus) ================= */
+const Astro = (() => {
+  const R = Math.PI/180, D = 180/Math.PI;
+  const LR=[[0,0,1,0,6288774,-20905355],[2,0,-1,0,1274027,-3699111],[2,0,0,0,658314,-2955968],[0,0,2,0,213618,-569925],[0,1,0,0,-185116,48888],[0,0,0,2,-114332,-3149],[2,0,-2,0,58793,246158],[2,-1,-1,0,57066,-152138],[2,0,1,0,53322,-170733],[2,-1,0,0,45758,-204586],[0,1,-1,0,-40923,-129620],[1,0,0,0,-34720,108743],[0,1,1,0,-30383,104755],[2,0,0,-2,15327,10321],[0,0,1,2,-12528,0],[0,0,1,-2,10980,79661],[4,0,-1,0,10675,-34782],[0,0,3,0,10034,-23210],[4,0,-2,0,8548,-21636],[2,1,-1,0,-7888,24208],[2,1,0,0,-6766,30824],[1,0,-1,0,-5163,-8379],[1,1,0,0,4987,-16675],[2,-1,1,0,4036,-12831],[2,0,2,0,3994,-10445],[4,0,0,0,3861,-11650],[2,0,-3,0,3665,14403],[0,1,-2,0,-2689,-7003],[2,0,-1,2,-2602,0],[2,-1,-2,0,2390,10056],[1,0,1,0,-2348,6322],[2,-2,0,0,2236,-9884],[0,1,2,0,-2120,5751],[0,2,0,0,-2069,0],[2,-2,-1,0,2048,-4950],[2,0,1,-2,-1773,4130],[2,0,0,2,-1595,0],[4,-1,-1,0,1215,-3958],[0,0,2,2,-1110,0],[3,0,-1,0,-892,3258],[2,1,1,0,-810,2616],[4,-1,-2,0,759,-1897],[0,2,-1,0,-713,-2117],[2,2,-1,0,-700,2354],[2,1,-2,0,691,0],[2,-1,0,-2,596,0],[4,0,1,0,549,-1423],[0,0,4,0,537,-1117],[4,-1,0,0,520,-1571],[1,0,-2,0,-487,-1739],[2,1,0,-2,-399,0],[0,0,2,-2,-381,-4421],[1,1,1,0,351,0],[3,0,-2,0,-340,0],[4,0,-3,0,330,0],[2,-1,2,0,327,0],[0,2,1,0,-323,1165],[1,1,-1,0,299,0],[2,0,3,0,294,0],[2,0,-1,-2,0,8752]];
+  const LB=[[0,0,0,1,5128122],[0,0,1,1,280602],[0,0,1,-1,277693],[2,0,0,-1,173237],[2,0,-1,1,55413],[2,0,-1,-1,46271],[2,0,0,1,32573],[0,0,2,1,17198],[2,0,1,-1,9266],[0,0,2,-1,8822],[2,-1,0,-1,8216],[2,0,-2,-1,4324],[2,0,1,1,4200],[2,1,0,-1,-3359],[2,-1,-1,1,2463],[2,-1,0,1,2211],[2,-1,-1,-1,2065],[0,1,-1,-1,-1870],[4,0,-1,-1,1828],[0,1,0,1,-1794],[0,0,0,3,-1749],[0,1,-1,1,-1565],[1,0,0,1,-1491],[0,1,1,1,-1475],[0,1,1,-1,-1410],[0,1,0,-1,-1344],[1,0,0,-1,-1335],[0,0,3,1,1107],[4,0,0,-1,1021],[4,0,-1,1,833]];
+  const jdOf = ms => ms/86400000 + 2440587.5;
+  function moonGeo(jde){
+    const T=(jde-2451545)/36525;
+    const Lp=218.3164477+481267.88123421*T, Dm=297.8501921+445267.1114034*T, M=357.5291092+35999.0502909*T,
+      Mp=134.9633964+477198.8675055*T, F=93.2720950+483202.0175233*T,
+      A1=119.75+131.849*T, A2=53.09+479264.290*T, A3=313.45+481266.484*T, E=1-0.002516*T-0.0000074*T*T;
+    let sl=0, sr=0, sb=0;
+    for(const [d,m,mp,f,l,r] of LR){const a=(d*Dm+m*M+mp*Mp+f*F)*R, e=m===0?1:(Math.abs(m)===1?E:E*E); sl+=e*l*Math.sin(a); sr+=e*r*Math.cos(a);}
+    for(const [d,m,mp,f,b] of LB){const a=(d*Dm+m*M+mp*Mp+f*F)*R, e=m===0?1:(Math.abs(m)===1?E:E*E); sb+=e*b*Math.sin(a);}
+    sl+=3958*Math.sin(A1*R)+1962*Math.sin((Lp-F)*R)+318*Math.sin(A2*R);
+    sb+=-2235*Math.sin(Lp*R)+382*Math.sin(A3*R)+175*Math.sin((A1-F)*R)+175*Math.sin((A1+F)*R)+127*Math.sin((Lp-Mp)*R)-115*Math.sin((Lp+Mp)*R);
+    const Om=125.04452-1934.136261*T;
+    return {lam:Lp+sl/1e6-0.004778*Math.sin(Om*R), beta:sb/1e6, dist:385000.56+sr/1000, eps:23.4392911-0.0130042*T+0.00256*Math.cos(Om*R)};
+  }
+  function sunGeo(jde){
+    const T=(jde-2451545)/36525, L0=280.46646+36000.76983*T, M=357.52911+35999.05029*T;
+    const C=(1.914602-0.004817*T)*Math.sin(M*R)+0.019993*Math.sin(2*M*R)+0.000289*Math.sin(3*M*R), Om=125.04-1934.136*T;
+    return {lam:L0+C-0.00569-0.00478*Math.sin(Om*R), beta:0, dist:1.496e8, eps:23.4392911-0.0130042*T+0.00256*Math.cos(Om*R)};
+  }
+  function horiz(ms, lat, lon, body){
+    const jdu=jdOf(ms), jde=jdu+69/86400, g=body==="moon"?moonGeo(jde):sunGeo(jde);
+    const l=g.lam*R, b=g.beta*R, e=g.eps*R;
+    const ra=Math.atan2(Math.sin(l)*Math.cos(e)-Math.tan(b)*Math.sin(e), Math.cos(l));
+    const dec=Math.asin(Math.sin(b)*Math.cos(e)+Math.cos(b)*Math.sin(e)*Math.sin(l));
+    const Tu=(jdu-2451545)/36525, gmst=280.46061837+360.98564736629*(jdu-2451545)+0.000387933*Tu*Tu;
+    const H=(gmst+lon)*R-ra, phi=lat*R;
+    const x=Math.cos(dec)*Math.cos(H), y=Math.cos(dec)*Math.sin(H), z=Math.sin(dec);
+    let up=(Math.cos(phi)*x+Math.sin(phi)*z)*g.dist; const north=(-Math.sin(phi)*x+Math.cos(phi)*z)*g.dist, west=y*g.dist;
+    if(body==="moon") up-=6378;
+    const alt=Math.atan2(up, Math.hypot(north, west))*D, az=((Math.atan2(-west, north)*D)%360+360)%360;
+    return {alt, az, lam:g.lam};
+  }
+  const refr = h => h>-1 ? 1.02/Math.tan((h+10.3/(h+5.11))*R)/60 : 0;
+  const sun = (ms,lat,lon) => horiz(ms,lat,lon,"sun");
+  function moon(ms,lat,lon){
+    const m=horiz(ms,lat,lon,"moon"), s=sunGeo(jdOf(ms)+69/86400);
+    const el=((m.lam-s.lam)%360+360)%360;
+    return {alt:m.alt+refr(m.alt), az:m.az, illum:(1-Math.cos(el*R))/2, waxing: el<180};
+  }
+  // light windows for local day starting at dayStartMs (local midnight)
+  function windows(dayStartMs, lat, lon){
+    const step=60000, res={bm:null,gm:null,ge:null,be:null, rise:null, set:null};
+    let prev=sun(dayStartMs,lat,lon).alt;
+    const open={};
+    const tag=(alt,rising)=>{
+      if(alt<=-4 && alt>-8) return rising?"bm":"be";
+      if(alt>-4 && alt<=6) return rising?"gm":"ge";
+      return null;
+    };
+    for(let t=dayStartMs+step; t<=dayStartMs+86400000; t+=step){
+      const a=sun(t,lat,lon).alt, rising=a>prev;
+      if(prev< -0.833 && a>=-0.833) res.rise=t;
+      if(prev>=-0.833 && a< -0.833) res.set=t;
+      const k=tag(a,rising);
+      for(const key of ["bm","gm","ge","be"]){
+        if(k===key){ if(!open[key]) open[key]=t; }
+        else if(open[key]){ if(!res[key]) res[key]={start:open[key], end:t}; open[key]=null; }
+      }
+      prev=a;
+    }
+    for(const key of ["bm","gm","ge","be"]) if(open[key] && !res[key]) res[key]={start:open[key], end:dayStartMs+86400000};
+    return res;
+  }
+  // find moon behind target: moon azimuth within tolerance of bearing, altitude near target angle, in twilight
+  function moonAlignments(lat, lon, bearing, targetAlt, fromMs, days){
+    const out=[]; const step=120000; let cur=null;
+    for(let t=fromMs; t<fromMs+days*86400000; t+=step){
+      const s=sun(t,lat,lon).alt;
+      if(s>6 || s< -10){ if(cur){out.push(cur);cur=null;} t+= (s< -30? 3600000 : 0); continue; }
+      const m=moon(t,lat,lon);
+      let daz=Math.abs(((m.az-bearing+540)%360)-180);
+      const dalt=m.alt-targetAlt;
+      if(m.illum>0.8 && daz<1.0 && dalt>-0.4 && dalt<1.2){
+        const score=daz+Math.abs(dalt-0.3);
+        if(!cur || t-cur.last>3600000){ if(cur) out.push(cur); cur={best:t,score,last:t,az:m.az,alt:m.alt,illum:m.illum,sun:s}; }
+        else { cur.last=t; if(score<cur.score) Object.assign(cur,{best:t,score,az:m.az,alt:m.alt,illum:m.illum,sun:s}); }
+      }
+    }
+    if(cur) out.push(cur);
+    return out;
+  }
+  return {sun, moon, windows, moonAlignments};
+})();
+
+/* ================= GEO HELPERS ================= */
+const Geo = {
+  dist(a,b){const R=6371000,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lon-a.lon)*r;
+    const h=Math.sin(dl/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h));},
+  bearing(a,b){const r=Math.PI/180,y=Math.sin((b.lon-a.lon)*r)*Math.cos(b.lat*r),
+    x=Math.cos(a.lat*r)*Math.sin(b.lat*r)-Math.sin(a.lat*r)*Math.cos(b.lat*r)*Math.cos((b.lon-a.lon)*r);
+    return ((Math.atan2(y,x)*180/Math.PI)+360)%360;},
+  parse(s){ if(!s) return null; s=String(s).trim();
+    let m=s.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/) || s.match(/[?&](?:q|query|ll)=(-?\d{1,2}\.\d+)(?:,|%2C)\s*(-?\d{1,3}\.\d+)/i)
+      || s.match(/(-?\d{1,2}[.,]\d+)\s*[,;\s]\s*(-?\d{1,3}[.,]\d+)/);
+    if(!m) return null; const lat=parseFloat(m[1].replace(",",".")), lon=parseFloat(m[2].replace(",","."));
+    if(!(Math.abs(lat)<=90 && Math.abs(lon)<=180)) return null; return {lat, lon};},
+  dir(b){return ["N","NO","O","SO","S","SW","W","NW"][Math.round(b/45)%8];},
+  maps(p){return `https://www.google.com/maps?q=${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;},
+  km(m){return m<1000? `${Math.round(m)} m` : `${(m/1000).toFixed(m<10000?1:0).replace(".",",")} km`;}
+};
+
+/* ================= WEATHER ================= */
+const Weather = (() => {
+  const cache = new Map();
+  const VARS="temperature_2m,dew_point_2m,relative_humidity_2m,wind_speed_10m,cloud_cover,cloud_cover_low,visibility,precipitation_probability";
+  async function get(p, force){
+    const key=p.lat.toFixed(3)+","+p.lon.toFixed(3);
+    const c=cache.get(key); if(c && !force && Date.now()-c.at<20*60000) return c.data;
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${p.lat.toFixed(4)}&longitude=${p.lon.toFixed(4)}&hourly=${VARS}&forecast_days=3&past_days=0&timeformat=unixtime&timezone=GMT`;
+    const r=await fetch(url); if(!r.ok) throw new Error("Wetterdienst antwortet nicht ("+r.status+")");
+    const j=await r.json(); cache.set(key,{at:Date.now(),data:j}); return j;
+  }
+  let foehnCache=null;
+  async function foehn(force){
+    if(foehnCache && !force && Date.now()-foehnCache.at<20*60000) return foehnCache.data;
+    const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude=46.50,47.27&longitude=11.35,11.39&hourly=pressure_msl&forecast_days=3&timeformat=unixtime&timezone=GMT");
+    if(!r.ok) throw new Error("Föhndaten fehlen"); const j=await r.json();
+    const t=j[0].hourly.time, bz=j[0].hourly.pressure_msl, ib=j[1].hourly.pressure_msl;
+    const data={time:t, diff:t.map((_,i)=>bz[i]!=null&&ib[i]!=null? bz[i]-ib[i] : null)};
+    foehnCache={at:Date.now(),data}; return data;
+  }
+  function at(w, ms){ // nearest hourly values
+    const t=w.hourly.time; let best=0, bd=Infinity;
+    for(let i=0;i<t.length;i++){const d=Math.abs(t[i]*1000-ms); if(d<bd){bd=d;best=i;}}
+    if(bd>90*60000) return null;
+    const o={}; for(const k in w.hourly) o[k]=w.hourly[k][best]; return o;
+  }
+  return {get, foehn, at};
+})();
+
+/* ================= RATING ================= */
+function evalCriteria(spot, h, fdiff){
+  const c=spot.crit, out=[];
+  const add=(label, ok, v)=>out.push({label, ok, v});
+  if(!h){ return [{label:"Keine Vorhersage für diese Zeit", ok:null, v:""}]; }
+  if(c.clear.on) add("Bewölkung", h.cloud_cover<=c.clear.max?"ok":h.cloud_cover<=c.clear.max+20?"warn":"bad", `${h.cloud_cover} % (max ${c.clear.max})`);
+  if(c.low.on) add("Tiefe Wolken", h.cloud_cover_low<=c.low.max?"ok":h.cloud_cover_low<=c.low.max+20?"warn":"bad", `${h.cloud_cover_low} % (max ${c.low.max})`);
+  if(c.vis.on){const km=h.visibility/1000; add("Fernsicht", km>=c.vis.min?"ok":km>=c.vis.min*0.6?"warn":"bad", `${km.toFixed(0)} km (min ${c.vis.min})`);}
+  if(c.dry.on) add("Luftfeuchte", h.relative_humidity_2m<=c.dry.max?"ok":h.relative_humidity_2m<=c.dry.max+15?"warn":"bad", `${h.relative_humidity_2m} % (max ${c.dry.max})`);
+  if(c.foehn.on){ if(fdiff==null) add("Föhn", null, "keine Daten"); else add("Föhn", fdiff>=4?"ok":fdiff>=2?"warn":"bad", `Δp ${fdiff.toFixed(1).replace(".",",")} hPa`);}
+  if(c.fog.on){const spread=h.temperature_2m-h.dew_point_2m, vis=h.visibility;
+    const ok = vis<1000 || (spread<=1.5 && h.wind_speed_10m<8); const warn = spread<=3 && h.wind_speed_10m<12;
+    add("Nebel", ok?"ok":warn?"warn":"bad", `Spread ${spread.toFixed(1).replace(".",",")} K · Sicht ${Geo.km(vis)} · Wind ${Math.round(h.wind_speed_10m)}`);}
+  if(c.wind.on) add("Wind", h.wind_speed_10m<=c.wind.max?"ok":h.wind_speed_10m<=c.wind.max*1.5?"warn":"bad", `${Math.round(h.wind_speed_10m)} km/h (max ${c.wind.max})`);
+  if(c.rain.on){const p=h.precipitation_probability??0; add("Regen", p<=c.rain.max?"ok":p<=c.rain.max+20?"warn":"bad", `${p} % (max ${c.rain.max})`);}
+  if(!out.length) add("Keine Kriterien gesetzt", null, "");
+  return out;
+}
+function overall(list){
+  const r=list.filter(x=>x.ok); if(!r.length) return "none";
+  const bad=r.filter(x=>x.ok==="bad").length, warn=r.filter(x=>x.ok==="warn").length;
+  if(bad>=2) return "bad"; if(bad===1) return warn? "bad":"warn"; if(warn) return "warn"; return "ok";
+}
+function foehnAt(f, ms){ if(!f) return null; let best=null,bd=Infinity; f.time.forEach((t,i)=>{const d=Math.abs(t*1000-ms); if(d<bd){bd=d;best=f.diff[i];}}); return bd<90*60000? best:null; }
+
+/* ================= STORAGE ================= */
+const KEY="lichtfenster.spots.v1";
+const DEFAULT_CRIT=()=>({clear:{on:false,max:30},low:{on:false,max:15},vis:{on:false,min:20},dry:{on:false,max:60},foehn:{on:false},fog:{on:false},wind:{on:false,max:15},rain:{on:true,max:30}});
+const SEED=[{id:"olympiaberg-frauenkirche",name:"Olympiaberg → Frauenkirche",cam:{lat:48.16950,lon:11.55060},target:{lat:48.13862,lon:11.57347,h:50},
+  windows:{bm:true,gm:true,ge:true,be:true},
+  crit:{clear:{on:true,max:30},low:{on:true,max:15},vis:{on:true,min:20},dry:{on:true,max:60},foehn:{on:true},fog:{on:false},wind:{on:false,max:15},rain:{on:true,max:30}},
+  moon:false, note:"Tele 400–600 mm, Alpen hinter den Türmen nur bei Föhn/sehr klarer Luft"}];
+let spots=[];
+function load(){ try{ const s=localStorage.getItem(KEY); spots = s? JSON.parse(s) : SEED.slice(); }catch(e){ spots=SEED.slice(); } }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(spots)); }catch(e){} }
+
+/* ================= UI HELPERS ================= */
+const $=id=>document.getElementById(id);
+const fmtT=ms=>new Date(ms).toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+const fmtD=ms=>new Date(ms).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"});
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const WN={bm:"BS früh",gm:"GS früh",ge:"GS abend",be:"BS abend"};
+const WORDER=["bm","gm","ge","be"];
+function midnight(offsetDays){const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+offsetDays); return d.getTime();}
+const dayCache=new Map();
+function daysFor(p){ const k=p.lat.toFixed(2)+","+p.lon.toFixed(2)+","+midnight(0);
+  if(!dayCache.has(k)) dayCache.set(k,[0,1,2].map(i=>({start:midnight(i), w:Astro.windows(midnight(i),p.lat,p.lon)})));
+  return dayCache.get(k); }
+function mid(win){return win? (win.start+win.end)/2 : null;}
+
+/* ================= SPOTS VIEW ================= */
+const state={open:null, weather:{}, foehn:null, errors:{}};
+async function loadWeather(force){
+  const need=spots.some(s=>s.crit.foehn.on);
+  if(need){ try{ state.foehn=await Weather.foehn(force);}catch(e){ state.foehn=null; } }
+  await Promise.all(spots.map(async s=>{ try{ state.weather[s.id]=await Weather.get(s.cam,force); delete state.errors[s.id]; }catch(e){ state.errors[s.id]=e.message||"Wetter nicht abrufbar"; } }));
+}
+function renderSpots(){
+  const box=$("spots");
+  if(!spots.length){ box.innerHTML=`<div class="card empty">Noch keine Spots. Tippe auf „+ Spot anlegen“ und füge einen Kamera-Standort ein, z. B. aus Google Maps.</div>`; return; }
+  box.innerHTML=spots.map(s=>{
+    const w=state.weather[s.id], days=daysFor(s.cam);
+    const tInfo = s.target? (()=>{const d=Geo.dist(s.cam,s.target), b=Geo.bearing(s.cam,s.target); return `${Geo.km(d)} · ${Math.round(b)}° ${Geo.dir(b)}`;})() : "kein Ziel gesetzt";
+    let grid=`<div class="grid"><div></div>${WORDER.map(k=>`<div class="h">${WN[k]}</div>`).join("")}`;
+    days.forEach((d,di)=>{
+      grid+=`<div class="d">${di===0?"Heute":fmtD(d.start)}</div>`;
+      for(const k of WORDER){
+        const win=d.w[k];
+        if(!s.windows[k] || !win){ grid+=`<div class="cell off" aria-hidden="true">–</div>`; continue; }
+        const past = win.end < Date.now();
+        let cls="none";
+        if(w && !past){ const h=Weather.at(w, mid(win)); cls=overall(evalCriteria(s,h,foehnAt(state.foehn,mid(win)))); }
+        if(past) cls="off";
+        const sel = state.open && state.open.id===s.id && state.open.di===di && state.open.k===k;
+        grid+=`<button class="cell ${cls}${sel?" sel":""}" data-spot="${esc(s.id)}" data-di="${di}" data-k="${k}" ${past?"disabled":""} aria-label="${WN[k]} ${fmtD(d.start)}"><b>${fmtT(win.start)}</b></button>`;
+      }
+    });
+    grid+="</div>";
+    let detail="";
+    if(state.open && state.open.id===s.id){
+      const d=days[state.open.di], win=d.w[state.open.k], m=mid(win);
+      const h=w? Weather.at(w,m):null, list=evalCriteria(s,h,foehnAt(state.foehn,m));
+      const mo=Astro.moon(m,s.cam.lat,s.cam.lon), su=Astro.sun(m,s.cam.lat,s.cam.lon);
+      detail=`<div class="detail"><div class="row" style="justify-content:space-between"><b>${WN[state.open.k]} · ${fmtD(d.start)} · ${fmtT(win.start)}–${fmtT(win.end)}</b><span class="dot ${overall(list)}"></span></div>
+        <ul class="plain">${list.map(x=>`<li class="crit"><span class="dot ${x.ok||"none"}"></span>${esc(x.label)}<span class="v">${esc(x.v)}</span></li>`).join("")}</ul>
+        <div class="meta" style="margin-top:6px">Sonne ${Math.round(su.az)}° ${Geo.dir(su.az)} · Mond ${mo.alt>0?`${Math.round(mo.az)}° ${Geo.dir(mo.az)}, ${mo.alt.toFixed(0)}° hoch`:"unter Horizont"}, ${Math.round(mo.illum*100)} %</div></div>`;
+    }
+    let moonHtml="";
+    if(s.moon && s.target){
+      const res=state.moonCache?.[s.id];
+      moonHtml = res ? (res.length? `<div class="moon"><b>Mond hinter dem Motiv</b><ul>${res.slice(0,5).map(r=>`<li>${fmtD(r.best)} ${fmtT(r.best)} · ${r.alt.toFixed(1).replace(".",",")}° hoch, ${Math.round(r.illum*100)} % · Sonne ${r.sun.toFixed(0)}°</li>`).join("")}</ul><div class="hint">Ungefähr: Mond höchstens 1° neben der Zielrichtung, knapp über dem Motiv. Exakte Position vor Ort mit PhotoPills/Planit feinjustieren.</div></div>`
+        : `<div class="moon muted small">Kein heller Mond hinter dem Motiv zur Dämmerung in den nächsten 120 Tagen.</div>`)
+        : `<div class="moon muted small">Mondtermine werden berechnet …</div>`;
+    }
+    return `<article class="card">
+      <div class="spot-head"><div><h2>${esc(s.name)}</h2><div class="meta">${tInfo}</div>${s.note?`<div class="small muted">${esc(s.note)}</div>`:""}</div>
+      <div class="row" style="flex-wrap:nowrap"><a class="btn" href="${Geo.maps(s.cam)}" target="_blank" rel="noopener">Karte</a><button data-edit="${esc(s.id)}">Bearbeiten</button></div></div>
+      ${state.errors[s.id]?`<p class="err">${esc(state.errors[s.id])}. Prüfe die Internetverbindung und tippe auf „Aktualisieren“.</p>`:""}
+      ${!w && !state.errors[s.id]?`<p class="small muted">Lade Wetter …</p>`:""}
+      ${grid}${detail}${moonHtml}</article>`;
+  }).join("");
+}
+$("spots").addEventListener("click",e=>{
+  const ed=e.target.closest("[data-edit]"); if(ed){ openEditor(spots.find(s=>s.id===ed.dataset.edit)); return; }
+  const c=e.target.closest(".cell[data-spot]"); if(!c) return;
+  const o={id:c.dataset.spot, di:+c.dataset.di, k:c.dataset.k};
+  state.open = (state.open && state.open.id===o.id && state.open.di===o.di && state.open.k===o.k)? null : o;
+  renderSpots();
+});
+function computeMoon(){
+  state.moonCache = state.moonCache || {};
+  let i=0; const todo=spots.filter(s=>s.moon && s.target && !state.moonCache[s.id]);
+  const next=()=>{ if(i>=todo.length) return; const s=todo[i++];
+    const b=Geo.bearing(s.cam,s.target), d=Geo.dist(s.cam,s.target), ta=Math.atan2(s.target.h||0,d)*180/Math.PI;
+    state.moonCache[s.id]=Astro.moonAlignments(s.cam.lat,s.cam.lon,b,ta,Date.now(),120);
+    renderSpots(); setTimeout(next,30); };
+  setTimeout(next,50);
+}
+async function refreshAll(force){ renderSpots(); await loadWeather(force); renderSpots(); computeMoon(); }
+
+/* ================= EDITOR ================= */
+let editing=null;
+const CK=["clear","low","vis","dry","foehn","fog","wind","rain"];
+function openEditor(spot){
+  editing = spot || null;
+  const s = spot || {name:"",cam:null,target:null,windows:{bm:true,gm:true,ge:true,be:true},crit:DEFAULT_CRIT(),moon:false,note:""};
+  $("edit-title").textContent = spot? "Spot bearbeiten":"Neuer Spot";
+  $("f-name").value=s.name; $("f-cam").value=s.cam? `${s.cam.lat.toFixed(5)}, ${s.cam.lon.toFixed(5)}`:"";
+  $("f-target").value=s.target? `${s.target.lat.toFixed(5)}, ${s.target.lon.toFixed(5)}`:""; $("f-th").value=s.target?.h ?? 50;
+  for(const k of WORDER) $("w-"+(k==="ge"?"ge":k)).checked=!!s.windows[k];
+  for(const k of CK){ $("c-"+k).checked=!!s.crit[k].on; const v=$("c-"+k+"-v"); if(v) v.value = s.crit[k].max ?? s.crit[k].min; }
+  $("c-moon").checked=!!s.moon; $("f-note").value=s.note||""; $("edit-err").textContent="";
+  $("edit-del").hidden=!spot; updateGeoHint();
+  $("editor").showModal();
+}
+function updateGeoHint(){
+  const c=Geo.parse($("f-cam").value), t=Geo.parse($("f-target").value);
+  $("f-geo").textContent = c&&t ? `Richtung ${Math.round(Geo.bearing(c,t))}° ${Geo.dir(Geo.bearing(c,t))}, Entfernung ${Geo.km(Geo.dist(c,t))}` : "";
+}
+$("f-cam").addEventListener("input",updateGeoHint); $("f-target").addEventListener("input",updateGeoHint);
+$("f-cam-gps").addEventListener("click",()=>locate(p=>{$("f-cam").value=`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;updateGeoHint();},msg=>$("edit-err").textContent=msg));
+$("edit-cancel").addEventListener("click",()=>$("editor").close());
+$("edit-del").addEventListener("click",()=>{
+  const b=$("edit-del");
+  if(b.dataset.confirm!=="1"){ b.dataset.confirm="1"; b.textContent="Wirklich löschen?"; return; }
+  spots=spots.filter(s=>s!==editing); save(); b.dataset.confirm=""; b.textContent="Löschen"; $("editor").close(); refreshAll();
+});
+$("edit-form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const name=$("f-name").value.trim(), cam=Geo.parse($("f-cam").value), tRaw=$("f-target").value.trim(), target=tRaw?Geo.parse(tRaw):null;
+  if(!name){ $("edit-err").textContent="Bitte einen Namen eingeben."; return; }
+  if(!cam){ $("edit-err").textContent="Kamera-Standort nicht erkannt. Füge Koordinaten wie „48.1695, 11.5506“ oder einen Google-Maps-Link ein."; return; }
+  if(tRaw && !target){ $("edit-err").textContent="Ziel nicht erkannt. Feld leeren oder Koordinaten einfügen."; return; }
+  const crit={}; for(const k of CK){ const v=$("c-"+k+"-v"); crit[k]={on:$("c-"+k).checked}; if(v){ crit[k][k==="vis"?"min":"max"]=Number(v.value)||0; } }
+  const spot={id: editing?.id || ("s"+Date.now().toString(36)), name, cam, target: target? {...target,h:Number($("f-th").value)||0}:null,
+    windows:{bm:$("w-bm").checked,gm:$("w-gm").checked,ge:$("w-ge").checked,be:$("w-be").checked}, crit, moon:$("c-moon").checked && !!target, note:$("f-note").value.trim()};
+  if(editing){ spots[spots.indexOf(editing)]=spot; } else spots.push(spot);
+  if(state.moonCache) delete state.moonCache[spot.id];
+  save(); $("editor").close(); refreshAll();
+});
+$("add-spot").addEventListener("click",()=>openEditor(null));
+$("refresh").addEventListener("click",()=>refreshAll(true));
+
+/* ================= BACKUP ================= */
+$("backup").addEventListener("click",()=>{ $("backup-text").value=JSON.stringify({app:"lichtfenster",v:1,spots},null,1); $("backup-err").textContent=""; $("backup-dlg").showModal(); });
+$("backup-close").addEventListener("click",()=>$("backup-dlg").close());
+$("backup-copy").addEventListener("click",async()=>{ try{ await navigator.clipboard.writeText($("backup-text").value); $("backup-copy").textContent="Kopiert"; }catch(e){ $("backup-text").select(); $("backup-err").textContent="Kopieren nicht möglich. Text ist markiert, bitte manuell kopieren."; } });
+$("backup-import").addEventListener("click",()=>{
+  try{ const j=JSON.parse($("backup-text").value); const list=Array.isArray(j)?j:j.spots;
+    if(!Array.isArray(list)||!list.every(s=>s.name&&s.cam&&s.crit)) throw 0;
+    spots=list; save(); state.moonCache={}; $("backup-dlg").close(); refreshAll(true);
+  }catch(e){ $("backup-err").textContent="Text ist keine gültige Lichtfenster-Sicherung."; }
+});
+
+/* ================= HERE & NOW ================= */
+function locate(ok, fail){
+  if(!navigator.geolocation){ fail("Dieses Gerät gibt keine Position heraus."); return; }
+  navigator.geolocation.getCurrentPosition(p=>ok({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy}),
+    e=>fail(e.code===1?"Standortzugriff abgelehnt. Erlaube ihn für diese Seite in den Browser-Einstellungen.":"Position nicht ermittelbar. Unter freiem Himmel nochmal versuchen."),
+    {enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+}
+const GENERIC={windows:{bm:true,gm:true,ge:true,be:true},crit:{clear:{on:true,max:40},low:{on:false,max:15},vis:{on:false,min:20},dry:{on:false,max:60},foehn:{on:false},fog:{on:false},wind:{on:false,max:15},rain:{on:true,max:30}}};
+const FOG={windows:GENERIC.windows,crit:{...GENERIC.crit,clear:{on:false,max:40},fog:{on:true}}};
+let herePos=null;
+$("locate").addEventListener("click",()=>{
+  $("here-pos").textContent="Suche Position …";
+  locate(async p=>{
+    herePos=p; $("here-pos").textContent=`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)} · ±${Math.round(p.acc)} m`;
+    renderHereAstro(); renderOwnNearby();
+    try{ const w=await Weather.get(p,true); renderHereWeather(w); }catch(e){ $("here-now").innerHTML=`<p class="err">${esc(e.message)}</p>`; }
+    loadSuggestions(p);
+  }, msg=>{ $("here-pos").textContent=msg; });
+});
+function renderHereAstro(){
+  const p=herePos, now=Date.now(), s=Astro.sun(now,p.lat,p.lon), m=Astro.moon(now,p.lat,p.lon);
+  $("here-now").innerHTML=`<div class="now">
+    <div><span>Sonne</span><b>${s.alt.toFixed(0)}° · ${Math.round(s.az)}° ${Geo.dir(s.az)}</b></div>
+    <div><span>Mond ${Math.round(m.illum*100)} % ${m.waxing?"zunehmend":"abnehmend"}</span><b>${m.alt>0?`${m.alt.toFixed(0)}° · ${Math.round(m.az)}° ${Geo.dir(m.az)}`:"unter Horizont"}</b></div>
+    <div id="hn-cloud"><span>Bewölkung</span><b>…</b></div><div id="hn-vis"><span>Sicht</span><b>…</b></div></div>`;
+}
+function renderHereWeather(w){
+  const h=Weather.at(w,Date.now());
+  if(h){ $("hn-cloud").innerHTML=`<span>Bewölkung (tief)</span><b>${h.cloud_cover} % (${h.cloud_cover_low} %)</b>`;
+    $("hn-vis").innerHTML=`<span>Sicht · Wind</span><b>${Geo.km(h.visibility)} · ${Math.round(h.wind_speed_10m)} km/h</b>`; }
+  const days=Astro.windows ? [0,1].map(i=>({start:midnight(i),w:Astro.windows(midnight(i),herePos.lat,herePos.lon)})) : [];
+  const rows=[];
+  for(const d of days) for(const k of WORDER){ const win=d.w[k]; if(!win||win.end<Date.now()) continue; const m=mid(win), hh=Weather.at(w,m);
+    rows.push({d,k,win, sky:overall(evalCriteria(GENERIC,hh,null)), fog:(k==="bm"||k==="gm")? overall(evalCriteria(FOG,hh,null)) : null, hh}); }
+  $("here-windows").innerHTML=`<div class="card"><b>Nächste Lichtfenster hier</b><ul class="plain" style="margin-top:6px">${rows.slice(0,5).map(r=>`
+    <li class="crit"><span class="dot ${r.sky}"></span>${WN[r.k]} ${r.d.start===midnight(0)?"heute":fmtD(r.d.start)} ${fmtT(r.win.start)}–${fmtT(r.win.end)}
+    <span class="v">${r.hh?`${r.hh.cloud_cover} % Wolken`:"–"}${r.fog==="ok"?" · Nebel möglich":""}</span></li>`).join("")}</ul>
+    <div class="hint">Grün = wenig Wolken, kein Regen. „Nebel möglich“ nach Taupunkt, Wind und Sicht.</div></div>`;
+}
+function renderOwnNearby(){
+  const list=spots.map(s=>({s,d:Geo.dist(herePos,s.cam)})).sort((a,b)=>a.d-b.d).filter(x=>x.d<50000).slice(0,5);
+  const box=$("here-own"); box.hidden=!list.length;
+  box.innerHTML=`<b>Deine Spots in der Nähe</b><ul class="plain sug">${list.map(x=>`<li><div class="t"><div>${esc(x.s.name)}</div><div class="meta">${Geo.km(x.d)} · ${Geo.dir(Geo.bearing(herePos,x.s.cam))}</div></div><a class="btn" href="${Geo.maps(x.s.cam)}" target="_blank" rel="noopener">Karte</a></li>`).join("")}</ul>`;
+}
+async function loadSuggestions(p){
+  const box=$("here-sug"); box.hidden=false; box.innerHTML=`<b>Motive in der Umgebung</b><p class="small muted">Suche Aussichtspunkte und Sehenswürdigkeiten …</p>`;
+  const found=[];
+  const q=`[out:json][timeout:20];(node["tourism"="viewpoint"](around:15000,${p.lat},${p.lon});node["man_made"="tower"]["tower:type"="observation"](around:15000,${p.lat},${p.lon}););out 60;`;
+  const lang=(navigator.language||"de").slice(0,2).toLowerCase();
+  const wikiLang=/^[a-z]{2}$/.test(lang)?lang:"de";
+  const [osm,wiki]=await Promise.allSettled([
+    fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:"data="+encodeURIComponent(q),headers:{"Content-Type":"application/x-www-form-urlencoded"}}).then(r=>r.ok?r.json():Promise.reject()),
+    fetch(`https://${wikiLang}.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${p.lat}|${p.lon}&gsradius=10000&gslimit=25&format=json&origin=*`).then(r=>r.ok?r.json():Promise.reject())
+  ]);
+  if(osm.status==="fulfilled") for(const n of osm.value.elements||[]) found.push({name:n.tags?.name||"Aussichtspunkt (ohne Namen)", kind:n.tags?.tourism==="viewpoint"?"Aussichtspunkt":"Aussichtsturm", lat:n.lat, lon:n.lon, named:!!n.tags?.name});
+  if(wiki.status==="fulfilled") for(const g of wiki.value.query?.geosearch||[]) found.push({name:g.title, kind:"Sehenswürdigkeit", lat:g.lat, lon:g.lon, named:true, wiki:`https://${wikiLang}.wikipedia.org/wiki/${encodeURIComponent(g.title.replace(/ /g,"_"))}`});
+  found.forEach(f=>{f.d=Geo.dist(p,f); f.b=Geo.bearing(p,f);});
+  const vp=found.filter(f=>f.kind!=="Sehenswürdigkeit").sort((a,b)=>(b.named-a.named)||(a.d-b.d)).slice(0,8);
+  const wk=found.filter(f=>f.kind==="Sehenswürdigkeit").sort((a,b)=>a.d-b.d).slice(0,10);
+  state.sug=[...vp,...wk];
+  const item=(f,i)=>`<li><div class="t"><div>${f.wiki?`<a href="${f.wiki}" target="_blank" rel="noopener">${esc(f.name)}</a>`:esc(f.name)}</div><div class="meta">${f.kind} · ${Geo.km(f.d)} ${Geo.dir(f.b)}</div></div>
+    <a class="btn" href="${Geo.maps(f)}" target="_blank" rel="noopener">Karte</a><button data-sug="${i}">Merken</button></li>`;
+  const err = osm.status!=="fulfilled" && wiki.status!=="fulfilled";
+  box.innerHTML=`<b>Motive in der Umgebung</b>${err?`<p class="err">Vorschläge gerade nicht abrufbar. Später nochmal „Position bestimmen“ tippen.</p>`:""}
+    ${vp.length?`<div class="small muted" style="margin-top:8px">Aussichtspunkte (bis 15 km)</div><ul class="plain sug">${vp.map((f)=>item(f,state.sug.indexOf(f))).join("")}</ul>`:""}
+    ${wk.length?`<div class="small muted" style="margin-top:8px">Sehenswürdigkeiten &amp; Architektur (bis 10 km)</div><ul class="plain sug">${wk.map(f=>item(f,state.sug.indexOf(f))).join("")}</ul>`:""}
+    ${!err&&!found.length?`<p class="small muted">Nichts Eingetragenes in der Nähe gefunden.</p>`:""}`;
+}
+$("here-sug").addEventListener("click",e=>{
+  const b=e.target.closest("[data-sug]"); if(!b) return; const f=state.sug[+b.dataset.sug];
+  const isView=f.kind!=="Sehenswürdigkeit";
+  openEditor(null);
+  $("f-name").value=f.name;
+  if(isView){ $("f-cam").value=`${f.lat.toFixed(5)}, ${f.lon.toFixed(5)}`; }
+  else { $("f-target").value=`${f.lat.toFixed(5)}, ${f.lon.toFixed(5)}`; if(herePos) $("f-cam").value=`${herePos.lat.toFixed(5)}, ${herePos.lon.toFixed(5)}`; }
+  updateGeoHint();
+});
+
+/* ================= TABS & BOOT ================= */
+function show(tab){ const here=tab==="here"; $("view-here").hidden=!here; $("view-spots").hidden=here;
+  $("tab-here").setAttribute("aria-selected",here); $("tab-spots").setAttribute("aria-selected",!here); }
+$("tab-spots").addEventListener("click",()=>show("spots")); $("tab-here").addEventListener("click",()=>show("here"));
+$("today").textContent=new Date().toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"});
+load(); refreshAll(false);
+</script>
+</body>
+</html>
