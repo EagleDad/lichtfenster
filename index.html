@@ -109,6 +109,18 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
 .facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px;margin-top:10px}
 .facts dt{color:var(--muted)}.facts dd{margin:0;font:13px var(--mono);text-align:right}
 .leaflet-tooltip{font:12px var(--body)}
+.mkcam{width:32px;height:32px;border-radius:50%;background:#d8342c;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.4);display:grid;place-items:center}
+.mkcam svg{width:16px;height:16px;display:block}
+.hz.arrow{width:26px;height:26px;border-radius:50%;background:#fff;color:#111;box-shadow:0 1px 4px rgba(0,0,0,.45);display:grid;place-items:center;font:700 16px/1 var(--body)}
+.hzicon{filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.skybar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:10px 0 8px}
+.skybar .seg button{padding:8px 10px}
+.evnav{display:flex;align-items:center;gap:6px;margin-left:auto}
+.evnav b{font:600 14px var(--body);min-width:132px;text-align:center;font-variant-numeric:tabular-nums}
+.round{width:34px;height:34px;border-radius:50%;justify-content:center;padding:0;font-size:18px}
+.round:disabled{opacity:.35;cursor:default}
+.skylegend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12px;color:var(--muted);margin:0 0 8px}
+.skylegend .ramp{width:110px;height:8px;border-radius:4px;border:1px solid var(--line)}
 .best{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
 .best h3{font:600 20px var(--display);margin:0 0 6px}
 .best select{font:14px var(--body);padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
@@ -182,6 +194,15 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
         <button type="button" id="plan-gps">Mein Standort</button>
       </div>
       <p class="hint" id="plan-help">Tippe auf die Karte, um das Motiv zu setzen. Punkte lassen sich verschieben.</p>
+      <div class="skybar">
+        <div class="seg" role="group" aria-label="Wolkenkarte">
+          <button type="button" data-layer="glow" aria-pressed="false" title="Abend- bzw. Morgenrot am Himmel">Himmelsröte</button>
+          <button type="button" data-layer="gold" aria-pressed="false" title="Wolken, die kurz vor Untergang bzw. nach Aufgang golden angestrahlt werden">Goldene Wolken</button>
+          <button type="button" data-layer="visible" aria-pressed="false" title="Himmelsröte, die man von diesem Ort aus auch sieht (keine tiefen Wolken vor Ort)">Sichtbar</button>
+        </div>
+        <div class="evnav"><button type="button" class="round" id="ev-prev" aria-label="Vorheriger Sonnenauf- oder -untergang">‹</button><b id="ev-label">–</b><button type="button" class="round" id="ev-next" aria-label="Nächster Sonnenauf- oder -untergang">›</button></div>
+      </div>
+      <div class="skylegend" id="sky-legend" hidden><span>gering</span><span class="ramp" id="sky-ramp"></span><span>stark</span><span id="sky-map-status"></span></div>
       <div id="plan-map"></div>
       <div class="legend">
         <span><i style="border-color:var(--blue)"></i>Blickrichtung &amp; Bildausschnitt</span>
@@ -189,6 +210,8 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
         <span><i style="border-color:var(--gold);border-top-style:dotted"></i>Sonnenseite (Licht von vorn)</span>
         <span><i style="border-color:#8e9ac4"></i>Hier stehen: Mond hinter dem Motiv</span>
         <span><i style="border-color:var(--muted);border-top-style:dashed"></i>Motiv füllt ⅔ der Bildhöhe</span>
+        <span><i style="border-color:#c9ccd6"></i>Weiß: Richtung Sonnenaufgang ↑, Sonnenuntergang ↓, Sonne &amp; Mond</span>
+        <span><i style="border-color:#c9ccd6;border-top-width:2px"></i>Weiße Bögen: so weit sind tiefe, mittlere und hohe Wolken sichtbar</span>
       </div>
       <div class="plan-ctl">
         <div><label for="plan-time">Datum &amp; Uhrzeit</label><input type="datetime-local" id="plan-time"></div>
@@ -794,13 +817,16 @@ const Sky=(()=>{
   function evaluate(ser){
     const g=km=>ser.find(x=>x.km===km);
     const canvas=avg([0,25,50].map(k=>Math.min(100,g(k).mid+0.8*g(k).high)));
-    const fC = canvas<10?0 : canvas<30?(canvas-10)/20 : canvas<=80?1 : 1-0.5*(canvas-80)/20;
     const blockN=avg([25,50,100].map(k=>Math.max(g(k).low,0.7*g(k).mid)));
-    const fN=1-clamp((blockN-15)/55);
     const blockF=avg([150,200,300,400].map(k=>Math.max(g(k).low,0.8*g(k).mid)));
-    const fF=1-clamp((blockF-20)/60);
     const lowL=Math.max(g(0).low,g(25).low);
-    let fL=1-clamp((lowL-25)/55); if(g(0).rain>60) fL*=0.5;
+    return score({canvas,blockN,blockF,lowL,rain:g(0).rain});
+  }
+  function score({canvas,blockN,blockF,lowL,rain}){
+    const fC = canvas<10?0 : canvas<30?(canvas-10)/20 : canvas<=80?1 : 1-0.5*(canvas-80)/20;
+    const fN=1-clamp((blockN-15)/55);
+    const fF=1-clamp((blockF-20)/60);
+    let fL=1-clamp((lowL-25)/55); if(rain>60) fL*=0.5;
     const glow=fC*fF*Math.min(1,fN+0.3);
     return {gold:fC*fN*fL, glow, visible:glow*fL, canvas, blockN, blockF, lowL, fC, fN, fF, fL};
   }
@@ -813,7 +839,7 @@ const Sky=(()=>{
       + row("Sichtbar bei dir", r.visible)
       + `<div class="meta">Leinwand ${Math.round(r.canvas)} % · Richtung Sonne verdeckt: nah ${Math.round(r.blockN)} %, fern ${Math.round(r.blockF)} % · tiefe Wolken bei dir ${Math.round(r.lowL)} %</div>`;
   }
-  return {events, label, load, at, evaluate, meters, cls, DISTS};
+  return {events, label, load, at, evaluate, score, meters, cls, DISTS};
 })();
 
 async function renderHereSky(p){
@@ -829,6 +855,83 @@ async function renderHereSky(p){
     $("here-sky-map").addEventListener("click",()=>Plan.openSky(p));
   }catch(e){ box.innerHTML=`<b>Himmelsröte &amp; goldene Wolken</b><p class="err">${esc(e.message)}</p>`; }
 }
+
+/* ================= SKY GRID (area map) ================= */
+const SkyGrid=(()=>{
+  const N=15, SPAN=4.5, cache=new Map(), VARS="cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation_probability";
+  function grid(c){
+    const lat=Math.round(c.lat*4)/4, lon=Math.round(c.lon*4)/4, dLon=SPAN/Math.cos(lat*Math.PI/180);
+    const g={N,lat0:lat-SPAN,lat1:lat+SPAN,lon0:lon-dLon,lon1:lon+dLon,pts:[]};
+    for(let i=0;i<N;i++) for(let j=0;j<N;j++) g.pts.push({lat:g.lat0+(g.lat1-g.lat0)*i/(N-1), lon:g.lon0+(g.lon1-g.lon0)*j/(N-1)});
+    return g;
+  }
+  async function load(c){
+    const g=grid(c), key=g.lat0.toFixed(2)+","+g.lon0.toFixed(2), hit=cache.get(key);
+    if(hit && Date.now()-hit.at<30*60000) return hit.data;
+    const res=[];
+    for(let k=0;k<g.pts.length;k+=75){
+      const ch=g.pts.slice(k,k+75);
+      const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${ch.map(p=>p.lat.toFixed(2)).join(",")}&longitude=${ch.map(p=>p.lon.toFixed(2)).join(",")}&hourly=${VARS}&forecast_days=3&timeformat=unixtime&timezone=GMT`);
+      if(!r.ok) throw new Error("Wolkenkarte nicht abrufbar ("+r.status+")");
+      let j=await r.json(); if(!Array.isArray(j)) j=[j]; res.push(...j);
+    }
+    const F=v=>res.map(x=>x?.hourly?.[v]||[]);
+    const data={g,time:res[0]?.hourly?.time||[],low:F("cloud_cover_low"),mid:F("cloud_cover_mid"),high:F("cloud_cover_high"),rain:F("precipitation_probability"),evc:new Map()};
+    cache.set(key,{at:Date.now(),data}); return data;
+  }
+  const clampI=v=>Math.max(0,Math.min(N-1,v));
+  function frac(g,lat,lon){ return [clampI((lat-g.lat0)/(g.lat1-g.lat0)*(N-1)), clampI((lon-g.lon0)/(g.lon1-g.lon0)*(N-1))]; }
+  function bil(arr,fi,fj){
+    const i=Math.min(N-2,Math.floor(fi)), j=Math.min(N-2,Math.floor(fj)), a=fi-i, b=fj-j;
+    return arr[i*N+j]*(1-a)*(1-b)+arr[(i+1)*N+j]*a*(1-b)+arr[i*N+j+1]*(1-a)*b+arr[(i+1)*N+j+1]*a*b;
+  }
+  function eventTime(lat,lon,type,t0){
+    let prev=Astro.sun(t0-3*3600000,lat,lon).alt, best=null;
+    for(let t=t0-3*3600000+120000;t<=t0+3*3600000;t+=120000){
+      const a=Astro.sun(t,lat,lon).alt, hit= type==="rise"? (prev<-0.833&&a>=-0.833) : (prev>=-0.833&&a<-0.833);
+      if(hit && (best===null || Math.abs(t-t0)<Math.abs(best-t0))) best=t; prev=a;
+    }
+    return best??t0;
+  }
+  function evaluate(data,type,t0){
+    const key=type+"|"+t0; if(data.evc.has(key)) return data.evc.get(key);
+    const {g,time}=data, n=N*N, out={gold:new Float32Array(n),glow:new Float32Array(n),visible:new Float32Array(n),missing:false};
+    if(!time.length){ out.missing=true; return out; }
+    const hours=new Map();
+    const at=k=>{ if(hours.has(k)) return hours.get(k);
+      const bn=new Float64Array(n), bf=new Float64Array(n), cv=new Float64Array(n), lo=new Float64Array(n), rn=new Float64Array(n);
+      for(let q=0;q<n;q++){ const L=data.low[q][k]??0, M=data.mid[q][k]??0, H=data.high[q][k]??0;
+        bn[q]=Math.max(L,0.7*M); bf[q]=Math.max(L,0.8*M); cv[q]=Math.min(100,M+0.8*H); lo[q]=L; rn[q]=data.rain[q][k]??0; }
+      const r={bn,bf,cv,lo,rn}; hours.set(k,r); return r; };
+    let valid=0;
+    for(let q=0;q<n;q++){
+      const pt=g.pts[q], te=eventTime(pt.lat,pt.lon,type,t0), k=Math.round((te/1000-time[0])/3600);
+      if(k<0||k>=time.length) continue;
+      valid++;
+      const G=at(k), az=Astro.sun(te,pt.lat,pt.lon).az;
+      const along=(arr,kms)=>kms.reduce((sum,km)=>{ const d=Geo.dest(pt,az,km*1000), [fi,fj]=frac(g,d.lat,d.lon); return sum+bil(arr,fi,fj); },0)/kms.length;
+      const r=Sky.score({canvas:G.cv[q], blockN:along(G.bn,[25,50,100]), blockF:along(G.bf,[150,200,300,400]), lowL:G.lo[q], rain:G.rn[q]});
+      out.gold[q]=r.gold; out.glow[q]=r.glow; out.visible[q]=r.visible;
+    }
+    if(!valid) out.missing=true;
+    data.evc.set(key,out); return out;
+  }
+  function render(vals,g,ramp){
+    const W=240,H=240, cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+    const ctx=cv.getContext("2d"), img=ctx.createImageData(W,H), r=Math.PI/180;
+    const my=lat=>Math.log(Math.tan(Math.PI/4+lat*r/2)), y0=my(g.lat1), y1=my(g.lat0), [a,b]=ramp;
+    for(let y=0;y<H;y++){
+      const m=y0+(y1-y0)*(y+0.5)/H, lat=(2*Math.atan(Math.exp(m))-Math.PI/2)/r, fi=clampI((lat-g.lat0)/(g.lat1-g.lat0)*(N-1));
+      for(let x=0;x<W;x++){
+        const v=bil(vals,fi,clampI((x+0.5)/W*(N-1))), t=Math.max(0,Math.min(1,(v-0.1)/0.8)), o=(y*W+x)*4;
+        img.data[o]=a[0]+(b[0]-a[0])*t; img.data[o+1]=a[1]+(b[1]-a[1])*t; img.data[o+2]=a[2]+(b[2]-a[2])*t;
+        img.data[o+3]= v<0.1? 0 : Math.round(255*Math.min(0.85,(v-0.1)/0.5*0.85));
+      }
+    }
+    ctx.putImageData(img,0,0); return cv.toDataURL();
+  }
+  return {load, evaluate, render, N};
+})();
 
 /* ================= SIGHT LINE (terrain + buildings) ================= */
 const Sight=(()=>{
@@ -928,10 +1031,38 @@ const Optics={
   distForFill:(h,f,fill)=>h/Math.tan(fill*Optics.vfov(f)*Math.PI/180)
 };
 const Plan=(()=>{
-  const st={target:null,cam:null,mode:"target",t:Date.now(),editingId:null,name:""};
+  const st={target:null,cam:null,mode:"target",t:Date.now(),editingId:null,name:"",layer:null,events:[],evIdx:0,skyFit:""};
   let map=null, over=null, skyL=null, sightL=null, sightKey="", mk={}, fitted=false;
   const LL=p=>[p.lat,p.lon];
-  const icon=c=>window.L.divIcon({className:"",html:`<div class="mk ${c}"></div>`,iconSize:[20,20],iconAnchor:[10,10]});
+  const CAM_HTML=`<div class="mkcam"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></svg></div>`;
+  const icon=c=>window.L.divIcon({className:"",html: c==="c"? CAM_HTML : `<div class="mk ${c}"></div>`,iconSize:c==="c"?[32,32]:[20,20],iconAnchor:c==="c"?[16,16]:[10,10]});
+  const SUN_SVG=(()=>{ let r=""; for(let a=0;a<360;a+=45){ const q=a*Math.PI/180; r+=`<line x1="${(20+12*Math.cos(q)).toFixed(1)}" y1="${(20+12*Math.sin(q)).toFixed(1)}" x2="${(20+18*Math.cos(q)).toFixed(1)}" y2="${(20+18*Math.sin(q)).toFixed(1)}"/>`; }
+    return `<svg class="hzicon" viewBox="0 0 40 40" width="100%" height="100%"><g stroke="#f2b705" stroke-width="3" stroke-linecap="round">${r}</g><circle cx="20" cy="20" r="9" fill="#ffd21f" stroke="#e8a800" stroke-width="1.5"/></svg>`; })();
+  function moonSVG(k,waxing){ const R=13, rx=(R*Math.abs(2*k-1)).toFixed(2);
+    const lit=`<path d="M20 ${20-R} A${R} ${R} 0 0 1 20 ${20+R} A${rx} ${R} 0 0 ${k>0.5?1:0} 20 ${20-R}Z" fill="#f4f1dc"${waxing?"":` transform="translate(40,0) scale(-1,1)"`}/>`;
+    return `<svg class="hzicon" viewBox="0 0 40 40" width="100%" height="100%"><circle cx="20" cy="20" r="${R}" fill="#3b4466" stroke="#c9d2ee" stroke-width="1.5"/>${lit}</svg>`; }
+  const hzDays=new Map();
+  function dayWin(p,t){ const d=new Date(t); d.setHours(0,0,0,0); const k=p.lat.toFixed(2)+","+p.lon.toFixed(2)+","+d.getTime();
+    if(!hzDays.has(k)){ if(hzDays.size>50) hzDays.clear(); hzDays.set(k,Astro.windows(d.getTime(),p.lat,p.lon)); } return hzDays.get(k); }
+  function horizonRadius(){ if(st.layer) return 430000; const b=map.getBounds(), c=map.getCenter();
+    return Math.max(150, 0.85*Math.min(c.distanceTo([c.lat,b.getEast()]), c.distanceTo([b.getNorth(),c.lng]))); }
+  function drawHorizon(){
+    const A=st.cam||st.target; if(!A) return;
+    const R=horizonRadius(), w=dayWin(A,st.t);
+    const ray=(az,dist,html,size,tip,arrow)=>{
+      const end=Geo.dest(A,az,dist);
+      window.L.polyline([LL(A),LL(end)],{color:"#1b2033",weight:6,opacity:.15,interactive:false}).addTo(over);
+      window.L.polyline([LL(A),LL(end)],{color:"#ffffff",weight:3,opacity:.9,interactive:false}).addTo(over);
+      window.L.marker(LL(end),{icon:window.L.divIcon({className:"",html,iconSize:[size,size],iconAnchor:[size/2,size/2]}),keyboard:false}).bindTooltip(tip,{direction:"top"}).addTo(over);
+      if(arrow) window.L.marker(LL(Geo.dest(A,az,dist*0.42)),{icon:window.L.divIcon({className:"",html:`<div class="hz arrow">${arrow}</div>`,iconSize:[26,26],iconAnchor:[13,13]}),interactive:false,keyboard:false}).addTo(over);
+    };
+    if(w.rise){ const s=Astro.sun(w.rise,A.lat,A.lon); ray(s.az,R,SUN_SVG,34,`Sonnenaufgang ${fmtT(w.rise)} · ${Math.round(s.az)}° ${Geo.dir(s.az)}`,"↑"); }
+    if(w.set){ const s=Astro.sun(w.set,A.lat,A.lon); ray(s.az,R,SUN_SVG,34,`Sonnenuntergang ${fmtT(w.set)} · ${Math.round(s.az)}° ${Geo.dir(s.az)}`,"↓"); }
+    const su=Astro.sun(st.t,A.lat,A.lon);
+    if(su.alt>0) ray(su.az,R*0.7,SUN_SVG,28,`Sonne um ${fmtT(st.t)} · ${Math.round(su.az)}° ${Geo.dir(su.az)}, ${su.alt.toFixed(0)}° hoch`);
+    const mo=Astro.moon(st.t,A.lat,A.lon);
+    if(mo.alt>0) ray(mo.az,R*0.7,moonSVG(mo.illum,mo.waxing),30,`Mond um ${fmtT(st.t)} · ${Math.round(mo.az)}° ${Geo.dir(mo.az)}, ${mo.alt.toFixed(0)}° hoch, ${Math.round(mo.illum*100)} %`);
+  }
   function toLocalInput(ms){const d=new Date(ms); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16);}
   function fromLocalInput(v){const t=new Date(v).getTime(); return isNaN(t)?Date.now():t;}
   function setMode(m){st.mode=m; $("pm-target").setAttribute("aria-pressed",m==="target"); $("pm-cam").setAttribute("aria-pressed",m==="cam");
@@ -941,7 +1072,8 @@ const Plan=(()=>{
     if(!window.L){ $("plan-err").textContent="Karte konnte nicht geladen werden. Prüfe die Internetverbindung und lade die Seite neu."; return false; }
     map=window.L.map("plan-map").setView([48.1374,11.5755],13);
     window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
-    over=window.L.layerGroup().addTo(map); skyL=window.L.layerGroup().addTo(map); sightL=window.L.layerGroup().addTo(map);
+    skyL=window.L.layerGroup().addTo(map); over=window.L.layerGroup().addTo(map); sightL=window.L.layerGroup().addTo(map);
+    map.on("zoomend",()=>draw(true));
     map.on("click",e=>{ const p={lat:e.latlng.lat,lon:e.latlng.lng};
       if(st.mode==="target"){ st.target=p; if(!st.cam) setMode("cam"); } else st.cam=p; draw(); });
     return true;
@@ -1000,6 +1132,7 @@ const Plan=(()=>{
         ["Bildwinkel", `${hf.toFixed(1).replace(".",",")}° breit · ${Optics.vfov(f).toFixed(1).replace(".",",")}° hoch`]);
       if(!dragging && !fitted){ map.fitBounds(window.L.latLngBounds([LL(C0),LL(T)]).pad(0.3)); fitted=true; }
     }
+    drawHorizon();
     $("plan-facts").innerHTML = facts.length? facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("") : `<dt>Start</dt><dd>Motiv auf der Karte antippen</dd>`;
   }
   function setTime(ms){ st.t=ms; $("plan-time").value=toLocalInput(ms); draw(); }
@@ -1078,48 +1211,89 @@ const Plan=(()=>{
       <div class="hint">Profil überhöht. Blau: Sicht zur Spitze. Gestrichelt: tiefster sichtbarer Punkt. Punktiert: Richtung Mond. Rot/orange: Gebäude, die die Spitze bzw. den unteren Teil verdecken.</div>`;
     const mv=$("s-move"); if(mv) mv.addEventListener("click",()=>{ const b=Geo.bearing(st.target,st.cam); st.cam=Geo.dest(st.target,b,r.moon.dIdeal); draw(); runSight(); });
   }
-  function fillSkyEvents(){
-    const p=st.cam||st.target||(map? {lat:map.getCenter().lat,lon:map.getCenter().lng}:{lat:48.1374,lon:11.5755});
-    const sel=$("sky-ev"), prev=sel.value; const evs=Sky.events(p,6);
-    sel.innerHTML=evs.map(e=>`<option value="${e.type}|${e.t}">${esc(Sky.label(e))}</option>`).join("");
-    if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
+  function anchorPt(){ return st.cam||st.target||(map? {lat:map.getCenter().lat,lon:map.getCenter().lng}:{lat:48.1374,lon:11.5755}); }
+  function updateEvLabel(){
+    const e=st.events[st.evIdx];
+    $("ev-label").textContent = e? `${new Date(e.t).toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"})} ${e.type==="rise"?"↑":"↓"} ${fmtT(e.t)}` : "–";
+    $("ev-label").title = e? Sky.label(e) : "";
+    $("ev-prev").disabled = st.evIdx<=0; $("ev-next").disabled = st.evIdx>=st.events.length-1;
   }
-  let skyAnchor=null;
-  async function runSky(){
-    const p=st.cam||st.target||(map? {lat:map.getCenter().lat,lon:map.getCenter().lng}:null);
-    if(!p){ $("sky-status").textContent="Setze zuerst einen Standort."; return; }
-    if(!$("sky-ev").value) fillSkyEvents();
-    const [type,ts]=$("sky-ev").value.split("|"), t=Number(ts);
-    const az=Astro.sun(t,p.lat,p.lon).az;
-    $("sky-status").textContent="Lade Wolken …"; $("sky-res").innerHTML=""; skyL.clearLayers();
+  function fillSkyEvents(){
+    const prev=st.events[st.evIdx];
+    st.events=Sky.events(anchorPt(),6);
+    let i = prev? st.events.findIndex(e=>e.type===prev.type && Math.abs(e.t-prev.t)<6*3600000) : 0;
+    st.evIdx = i<0? 0 : i;
+    $("sky-ev").innerHTML=st.events.map((e,k)=>`<option value="${k}">${esc(Sky.label(e))}</option>`).join("");
+    $("sky-ev").value=String(st.evIdx); updateEvLabel();
+  }
+  const RAMPS={glow:[[255,150,60],[214,36,28]], gold:[[255,214,90],[226,132,10]], visible:[[255,120,100],[196,22,70]]};
+  const LAYER_NAME={glow:"Himmelsröte",gold:"Goldene Wolken",visible:"Sichtbare Himmelsröte"};
+  function setLayerState(l){
+    st.layer=l;
+    document.querySelectorAll("[data-layer]").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.layer===st.layer)));
+    $("sky-legend").hidden=!st.layer;
+    if(st.layer){ const [a,b]=RAMPS[st.layer]; $("sky-ramp").style.background=`linear-gradient(90deg,rgba(${a},.15),rgba(${a},.6),rgba(${b},.9))`; }
+    else { skyL.clearLayers(); }
+  }
+  const visDist=h=>{ const a=1/(2*8500), b=Math.tan(2*Math.PI/180); return (-b+Math.sqrt(b*b+4*a*h))/(2*a); };
+  let skyToken=0, layerToken=0;
+  async function drawSkyLayer(){
+    const e=st.events[st.evIdx]; if(!e||!st.layer) return;
+    const p=anchorPt(), tok=++layerToken, layer=st.layer;
+    $("sky-map-status").textContent="· lade Wolkenkarte …";
     try{
-      const rays=await Sky.load(p,[az]), ser=Sky.at(rays[0],t);
-      $("sky-status").textContent="";
-      if(!ser){ $("sky-res").innerHTML=`<p class="small muted">Für diesen Termin gibt es noch keine Vorhersage.</p>`; return; }
-      const r=Sky.evaluate(ser); $("sky-res").innerHTML=Sky.meters(r,type);
-      const css=getComputedStyle(document.documentElement), col=v=>css.getPropertyValue("--"+Sky.cls(v)).trim();
-      const end=Geo.dest(p,az,400000);
-      window.L.polyline([LL(p),LL(end)],{color:css.getPropertyValue("--gold").trim(),weight:2,dashArray:"4 6"}).bindTooltip(`Richtung Sonne ${Math.round(az)}°`).addTo(skyL);
-      window.L.polyline([LL(p),LL(Geo.dest(p,az,50000))],{color:col(r.fC),weight:12,opacity:.35}).bindTooltip(`Wolken-Leinwand 0–50 km: ${Math.round(r.canvas)} % mittel/hoch`).addTo(skyL);
-      window.L.polyline([LL(Geo.dest(p,az,150000)),LL(end)],{color:col(r.fF),weight:12,opacity:.35}).bindTooltip(`Lichtlücke 150–400 km: ${Math.round(r.blockF)} % verdeckt`).addTo(skyL);
-      for(const x of ser){
-        const bar=k=>`<i class="${k}" style="height:${Math.max(2,Math.round(x[k]*0.22))}px"></i>`;
-        window.L.marker([x.lat,x.lon],{icon:window.L.divIcon({className:"",html:`<div class="cbar">${bar("low")}${bar("mid")}${bar("high")}</div>`,iconSize:[24,28],iconAnchor:[12,28]})})
-          .bindTooltip(`${x.km} km: tief ${x.low} %, mittel ${x.mid} %, hoch ${x.high} %`).addTo(skyL);
+      const data=await SkyGrid.load(p); if(tok!==layerToken) return;
+      const ev=SkyGrid.evaluate(data,e.type,e.t); if(tok!==layerToken||st.layer!==layer) return;
+      skyL.clearLayers();
+      const g=data.g, bounds=[[g.lat0,g.lon0],[g.lat1,g.lon1]];
+      if(ev.missing) $("sky-map-status").textContent="· für diesen Termin noch keine Wolkendaten";
+      else { window.L.imageOverlay(SkyGrid.render(ev[layer],g,RAMPS[layer]),bounds,{opacity:1,interactive:false}).addTo(skyL);
+        $("sky-map-status").textContent=`· ${LAYER_NAME[layer]} zum ${e.type==="rise"?"Sonnenaufgang":"Sonnenuntergang"} am jeweiligen Ort`; }
+      window.L.rectangle(bounds,{color:"#1b2033",weight:1.5,fill:false,interactive:false}).addTo(skyL);
+      const A=st.cam||st.target||p, az=Astro.sun(e.t,A.lat,A.lon).az;
+      for(const [h,name] of [[2,"Tiefe Wolken (ca. 2 km hoch)"],[5,"Mittelhohe Wolken (ca. 5 km)"],[9,"Hohe Wolken (ca. 9 km)"]]){
+        const d=visDist(h), pts=[]; for(let a=-55;a<=55;a+=5) pts.push(LL(Geo.dest(A,(az+a+360)%360,d*1000)));
+        window.L.polyline(pts,{color:"#1b2033",weight:5,opacity:.15,interactive:false}).addTo(skyL);
+        window.L.polyline(pts,{color:"#ffffff",weight:2.5,opacity:.95}).bindTooltip(`${name}: bis ca. ${Math.round(d)} km sichtbar`,{sticky:true}).addTo(skyL);
       }
-      skyAnchor=p;
-      map.fitBounds(window.L.latLngBounds([LL(p),LL(end)]).pad(0.1));
-    }catch(e){ $("sky-status").textContent=""; $("sky-res").innerHTML=`<p class="err">${esc(e.message)}</p>`; }
+      const key=g.lat0.toFixed(2)+","+g.lon0.toFixed(2);
+      if(st.skyFit!==key){ st.skyFit=key; map.fitBounds(bounds,{padding:[8,8]}); }
+    }catch(err){ if(tok===layerToken) $("sky-map-status").textContent="· "+(err.message||"Wolkenkarte nicht abrufbar"); }
+  }
+  async function runSky(opts={}){
+    if(!map) return;
+    if(!st.events.length) fillSkyEvents();
+    const e=st.events[st.evIdx];
+    if(!e){ $("sky-status").textContent="Kein Sonnenauf- oder -untergang in den nächsten Tagen."; return; }
+    st.t=e.t; $("plan-time").value=toLocalInput(e.t);
+    if(!st.layer && opts.autoLayer) setLayerState("glow");
+    draw(true);
+    if(st.layer) drawSkyLayer();
+    const p=anchorPt(), az=Astro.sun(e.t,p.lat,p.lon).az, tok=++skyToken;
+    $("sky-status").textContent="Lade Wolken …"; $("sky-res").innerHTML="";
+    try{
+      const rays=await Sky.load(p,[az]); if(tok!==skyToken) return;
+      const ser=Sky.at(rays[0],e.t); $("sky-status").textContent="";
+      $("sky-res").innerHTML = ser? Sky.meters(Sky.evaluate(ser),e.type) : `<p class="small muted">Für diesen Termin gibt es noch keine Vorhersage.</p>`;
+    }catch(err){ if(tok!==skyToken) return; $("sky-status").textContent=""; $("sky-res").innerHTML=`<p class="err">${esc(err.message)}</p>`; }
   }
   function openSky(p){
     st.cam={lat:p.lat,lon:p.lon}; st.target=null; st.editingId=null; st.name=""; fitted=false; setMode("target"); showTab("plan");
-    setTimeout(()=>{ if(!map) return; fillSkyEvents(); runSky(); $("sky-box").scrollIntoView({behavior:"smooth",block:"start"}); },120);
+    setTimeout(()=>{ if(!map) return; fillSkyEvents(); runSky({autoLayer:true}); $("plan-map").scrollIntoView({behavior:"smooth",block:"start"}); },120);
   }
   function wireExtra(){
     $("s-run").addEventListener("click",runSight);
-    $("sky-run").addEventListener("click",runSky);
-    $("sky-zoom").addEventListener("click",()=>{ const p=skyAnchor||st.cam||st.target; if(map&&p) map.setView(LL(p),13); });
-    $("sky-ev").addEventListener("focus",fillSkyEvents);
+    $("sky-run").addEventListener("click",()=>{ fillSkyEvents(); runSky({autoLayer:true}); });
+    $("sky-zoom").addEventListener("click",()=>{ const p=st.cam||st.target; if(map&&p) map.setView(LL(p),13); });
+    $("sky-ev").addEventListener("change",()=>{ st.evIdx=Number($("sky-ev").value)||0; updateEvLabel(); runSky(); });
+    const step=d=>{ if(!st.events.length) fillSkyEvents(); const i=st.evIdx+d; if(i<0||i>=st.events.length) return;
+      st.evIdx=i; $("sky-ev").value=String(i); updateEvLabel(); runSky(); };
+    $("ev-prev").addEventListener("click",()=>step(-1)); $("ev-next").addEventListener("click",()=>step(1));
+    document.querySelectorAll("[data-layer]").forEach(b=>b.addEventListener("click",()=>{
+      if(!st.events.length) fillSkyEvents();
+      setLayerState(st.layer===b.dataset.layer? null : b.dataset.layer);
+      if(st.layer) runSky(); else draw(true);
+    }));
   }
   function applySuggestion(sg){
     st.t=sg.t; $("plan-time").value=toLocalInput(sg.t);
