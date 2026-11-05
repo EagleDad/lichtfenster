@@ -120,6 +120,7 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
 .evnav b{font:600 14px var(--body);min-width:132px;text-align:center;font-variant-numeric:tabular-nums}
 .round{width:34px;height:34px;border-radius:50%;justify-content:center;padding:0;font-size:18px}
 .round:disabled{opacity:.35;cursor:default}
+button:disabled{opacity:.45;cursor:default}
 .skylegend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:12px;color:var(--muted);margin:0 0 8px}
 .skylegend .ramp{width:110px;height:8px;border-radius:4px;border:1px solid var(--line)}
 .best{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
@@ -193,6 +194,10 @@ input[type=datetime-local]{font:14px var(--body);padding:8px;border:1px solid va
           <button type="button" id="pm-cam" aria-pressed="false">Kamera setzen</button>
         </div>
         <button type="button" id="plan-gps">Mein Standort</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button type="button" id="plan-del-target">Motiv entfernen</button>
+        <button type="button" id="plan-del-cam">Kamera entfernen</button>
       </div>
       <p class="hint" id="plan-help">Tippe auf die Karte, um das Motiv zu setzen. Punkte lassen sich verschieben.</p>
       <div class="skybar">
@@ -1164,6 +1169,7 @@ const Plan=(()=>{
         ["Bildwinkel", `${hf.toFixed(1).replace(".",",")}° breit · ${Optics.vfov(f).toFixed(1).replace(".",",")}° hoch`]);
       if(!dragging && !fitted){ map.fitBounds(window.L.latLngBounds([LL(C0),LL(T)]).pad(0.3)); fitted=true; }
     }
+    $("plan-del-target").disabled=!st.target; $("plan-del-cam").disabled=!st.cam;
     drawHorizon();
     $("plan-facts").innerHTML = facts.length? facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("") : `<dt>Start</dt><dd>Motiv auf der Karte antippen</dd>`;
   }
@@ -1188,6 +1194,8 @@ const Plan=(()=>{
     document.querySelectorAll("[data-pt]").forEach(b=>b.addEventListener("click",()=>{ const v=b.dataset.pt;
       if(v==="now") setTime(Date.now()); else if(v==="30"||v==="-30") setTime(st.t+Number(v)*60000); else setTime(nextWindow(v)); }));
     $("plan-gps").addEventListener("click",()=>{ $("plan-err").textContent=""; locate(p=>{ herePos=p; st.cam={lat:p.lat,lon:p.lon}; if(map) map.setView(LL(p),15); draw(); }, msg=>$("plan-err").textContent=msg); });
+    $("plan-del-target").addEventListener("click",()=>{ st.target=null; fitted=false; setMode("target"); draw(); if(st.layer) drawSkyLayer(); });
+    $("plan-del-cam").addEventListener("click",()=>{ st.cam=null; fitted=false; setMode(st.target?"cam":"target"); draw(); if(st.layer) drawSkyLayer(); });
     $("plan-clear").addEventListener("click",()=>{ st.target=null; st.cam=null; st.editingId=null; st.name=""; fitted=false; setMode("target"); draw(); });
     $("plan-save").addEventListener("click",()=>{
       $("plan-err").textContent="";
