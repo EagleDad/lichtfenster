@@ -1,19 +1,28 @@
 {
  "app": "lichtfenster-alarme",
  "version": 1,
- "updated": "2026-11-05",
+ "updated": "2026-11-06",
  "spots": [
   {
    "name": "Olympiaberg → Frauenkirche",
    "lat": 48.1695,
    "lon": 11.5506,
+   "target": {
+    "lat": 48.13862,
+    "lon": 11.57347
+   },
    "alarms": {
     "glow": true,
     "gold": true,
     "fog": true,
+    "seafog": false,
+    "alpenglow": false,
+    "frost": false,
+    "rainbow": false,
     "snow": false,
     "night": false,
     "nightMoon": "any",
+    "milky": false,
     "aurora": true
    }
   }
